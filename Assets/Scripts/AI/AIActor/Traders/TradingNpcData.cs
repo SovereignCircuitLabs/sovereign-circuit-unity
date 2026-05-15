@@ -38,10 +38,19 @@ public class NpcPortfolioConfig
 [Serializable]
 public class NpcPortfolioState
 {
+    /// <summary>NPC 钱包中可直接使用的 USDC 余额，用于支付生活预算或执行入金操作，也可以存入Vault（即智能合约账户）</summary>
     public float walletUSDC;
+
+    /// <summary>NPC 已存入 Vault 的 USDC 余额，代表资金正在参与 Vault 策略、投资以及收益逻辑，且不在钱包内，只能通过 withdraw 取出</summary>
     public float vaultUSDC;
+
+    /// <summary>预留给生活需求的 USDC 预算，低于阈值时 NPC 会优先从钱包补充</summary>
     public float livingBudgetUSDC;
+
+    /// <summary>安全储备预算，用来限制交易行为，避免把钱包资金全部投入 Vault</summary>
     public float reserveBudgetUSDC;
+
+    /// <summary>可用于交易或策略投入的 USDC 预算，决定 NPC 是否有足够资金执行交易</summary>
     public float tradingBudgetUSDC;
 
     public float TotalUSDC
