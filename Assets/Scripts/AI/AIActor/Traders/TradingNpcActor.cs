@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using CleverCrow.Fluid.BTs.Trees;
 using UnityEngine;
@@ -27,6 +28,25 @@ public abstract class TradingNpcActor : AIActor
     private bool asyncActionSucceeded;
     private string asyncActionName;
     private bool brainReady;
+    private readonly List<TradingNpcActivityRecord> activityLog = new List<TradingNpcActivityRecord>();
+    private const int MaxActivityLogCount = 100;
+    private string currentActivity = "Initializing";
+    private string currentMoveTargetName;
+
+    public string WalletAddress
+    {
+        get { return contractClient != null ? contractClient.WalletAddress : null; }
+    }
+
+    public string CurrentActivity
+    {
+        get { return currentActivity; }
+    }
+
+    public bool IsRunningChainAction
+    {
+        get { return asyncActionRunning; }
+    }
 
     protected override async void Start()
     {
@@ -55,7 +75,16 @@ public abstract class TradingNpcActor : AIActor
             }
 
             Debug.LogError($"{LogPrefix} failed to initialize trader portfolio: {ex}");
+            AddActivity(TradingNpcActivityType.ChainActionFailed, "Initialize failed", ex.Message);
         }
+    }
+
+    protected override void Update()
+    {
+        base.Update();
+        
+        if(Input.GetKeyDown(KeyCode.Escape))
+            Application.Quit();
     }
 
     protected override void FixedUpdate()
@@ -105,13 +134,27 @@ public abstract class TradingNpcActor : AIActor
         Vector3 targetPosition = target.position;
         targetPosition.y = arriveHeight;
 
+        if (currentMoveTargetName != target.name)
+        {
+            currentMoveTargetName = target.name;
+            currentActivity = $"Moving to {currentMoveTargetName}";
+            AddActivity(TradingNpcActivityType.MoveToTarget, "Move target changed", currentActivity);
+        }
+
         Vector3 acceleration = steeringBehaviors.Arrive(targetPosition);
         acceleration = AvoidCollision(acceleration);
 
         steeringBehaviors.Steer(acceleration);
         steeringBehaviors.LookMoveDirection();
 
-        return steeringBehaviors.IsArrived(targetPosition) ? BtTaskStatus.Success : BtTaskStatus.Continue;
+        if (steeringBehaviors.IsArrived(targetPosition))
+        {
+            currentActivity = $"Arrived at {currentMoveTargetName}";
+            currentMoveTargetName = null;
+            return BtTaskStatus.Success;
+        }
+
+        return BtTaskStatus.Continue;
     }
 
     private BtTaskStatus Wander()
@@ -141,6 +184,8 @@ public abstract class TradingNpcActor : AIActor
         portfolioState.walletUSDC -= spend;
         portfolioState.livingBudgetUSDC += spend;
         lastLivingSpendTime = Time.time;
+        currentActivity = $"Bought living supplies: {spend:0.####} USDC";
+        AddActivity(TradingNpcActivityType.BuyLivingSupplies, "Bought living supplies", currentActivity, null, spend);
         Debug.Log($"{LogPrefix} bought living supplies for {spend:0.####} USDC");
         return BtTaskStatus.Success;
     }
@@ -158,6 +203,11 @@ public abstract class TradingNpcActor : AIActor
             AllocateBudgetsFromBalances();
 
             lastRebalanceTime = Time.time;
+            currentActivity = "Portfolio rebalanced";
+            AddActivity(
+                TradingNpcActivityType.Rebalance,
+                "Portfolio rebalanced",
+                $"living={portfolioState.livingBudgetUSDC:0.####}, reserve={portfolioState.reserveBudgetUSDC:0.####}, trading={portfolioState.tradingBudgetUSDC:0.####}");
             Debug.Log($"{LogPrefix} rebalanced portfolio: living={portfolioState.livingBudgetUSDC:0.####}, reserve={portfolioState.reserveBudgetUSDC:0.####}, trading={portfolioState.tradingBudgetUSDC:0.####}");
         });
     }
@@ -189,6 +239,8 @@ public abstract class TradingNpcActor : AIActor
 
             if (decision.intent == TradeIntent.Hold || amount < portfolioConfig.minTradeUSDC)
             {
+                currentActivity = $"Holding: {decision.reason}";
+                AddActivity(TradingNpcActivityType.TradeHold, "Trade hold", decision.reason);
                 Debug.Log($"{LogPrefix} holds: {decision.reason}");
                 return;
             }
@@ -220,6 +272,13 @@ public abstract class TradingNpcActor : AIActor
             }
 
             lastChainActionTime = Time.time;
+            currentActivity = $"{decision.intent} {amount:0.####} USDC";
+            AddActivity(
+                decision.intent == TradeIntent.Deposit ? TradingNpcActivityType.TradeDeposit : TradingNpcActivityType.TradeWithdraw,
+                currentActivity,
+                decision.reason,
+                txHash,
+                amount);
             Debug.Log($"{LogPrefix} {decision.intent} {amount:0.####} USDC, reason={decision.reason}, tx={txHash}");
         });
     }
@@ -241,6 +300,11 @@ public abstract class TradingNpcActor : AIActor
         await RefreshBalancesAsync();
         AllocateBudgetsFromBalances();
         lastRebalanceTime = Time.time;
+        currentActivity = "Initialized";
+        AddActivity(
+            TradingNpcActivityType.Initialized,
+            "Portfolio initialized",
+            $"wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, address={contractClient.WalletAddress}");
 
         Debug.Log($"{LogPrefix} initialized USDC portfolio for {contractClient.WalletAddress}: wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, living={portfolioState.livingBudgetUSDC:0.####}, reserve={portfolioState.reserveBudgetUSDC:0.####}, trading={portfolioState.tradingBudgetUSDC:0.####}");
     }
@@ -298,6 +362,8 @@ public abstract class TradingNpcActor : AIActor
         catch (Exception ex)
         {
             Debug.LogError($"{LogPrefix} async action failed: {ex}");
+            currentActivity = $"{asyncActionName} failed";
+            AddActivity(TradingNpcActivityType.ChainActionFailed, currentActivity, ex.Message);
             asyncActionSucceeded = false;
         }
         finally
@@ -331,5 +397,112 @@ public abstract class TradingNpcActor : AIActor
 
             return $"[{archetype}] {name}";
         }
+    }
+
+    public TradingNpcSnapshot CreateSnapshot(int maxActivities = 20)
+    {
+        TradingNpcSnapshot snapshot = new TradingNpcSnapshot
+        {
+            npcId = GetInstanceID().ToString(),
+            displayName = name,
+            archetype = archetype,
+            walletAddress = WalletAddress,
+            worldPosition = transform.position,
+            currentActivity = currentActivity,
+            isRunningChainAction = asyncActionRunning,
+            portfolioConfig = portfolioConfig,
+            portfolioState = portfolioState,
+            fields = BuildFieldDisplayInfo()
+        };
+
+        int start = Mathf.Max(0, activityLog.Count - Mathf.Max(0, maxActivities));
+        for (int i = activityLog.Count - 1; i >= start; i--)
+        {
+            snapshot.recentActivities.Add(activityLog[i]);
+        }
+
+        return snapshot;
+    }
+
+    public List<TradingNpcActivityRecord> GetRecentActivities(int maxCount = 20)
+    {
+        List<TradingNpcActivityRecord> result = new List<TradingNpcActivityRecord>();
+        int start = Mathf.Max(0, activityLog.Count - Mathf.Max(0, maxCount));
+        for (int i = activityLog.Count - 1; i >= start; i--)
+        {
+            result.Add(activityLog[i]);
+        }
+
+        return result;
+    }
+
+    public void RecordExternalActivity(
+        TradingNpcActivityType type,
+        string title,
+        string details,
+        string txHash = null,
+        float amountUSDC = 0f)
+    {
+        currentActivity = title;
+        AddActivity(type, title, details, txHash, amountUSDC);
+    }
+
+    private void AddActivity(
+        TradingNpcActivityType type,
+        string title,
+        string details,
+        string txHash = null,
+        float amountUSDC = 0f)
+    {
+        activityLog.Add(new TradingNpcActivityRecord
+        {
+            type = type,
+            title = title,
+            details = details,
+            txHash = txHash,
+            amountUSDC = amountUSDC,
+            gameTime = Time.time,
+            utcTime = DateTime.UtcNow.ToString("o"),
+            worldPosition = transform.position
+        });
+
+        if (activityLog.Count > MaxActivityLogCount)
+        {
+            activityLog.RemoveAt(0);
+        }
+    }
+
+    private List<NpcFieldDisplayInfo> BuildFieldDisplayInfo()
+    {
+        return new List<NpcFieldDisplayInfo>
+        {
+            Field("Config", "livingNeedsWeight", "Living Needs Weight", portfolioConfig.livingNeedsWeight, "Share of total funds reserved for living needs."),
+            Field("Config", "reserveWeight", "Reserve Weight", portfolioConfig.reserveWeight, "Share of total funds kept as safety reserve."),
+            Field("Config", "tradingWeight", "Trading Weight", portfolioConfig.tradingWeight, "Share of total funds allowed for strategy/trading decisions."),
+            Field("Config", "minimumLivingBudgetUSDC", "Minimum Living Budget", portfolioConfig.minimumLivingBudgetUSDC, "When living budget falls below this value, NPC buys supplies."),
+            Field("Config", "minimumReserveBudgetUSDC", "Minimum Reserve Budget", portfolioConfig.minimumReserveBudgetUSDC, "Human-readable lower reserve target for UI and tuning."),
+            Field("Config", "rebalanceInterval", "Rebalance Interval", portfolioConfig.rebalanceInterval, "Seconds between portfolio rebalances."),
+            Field("Config", "chainActionCooldown", "Chain Action Cooldown", portfolioConfig.chainActionCooldown, "Minimum seconds between deposit/withdraw transactions."),
+            Field("Config", "minTradeUSDC", "Minimum Trade Size", portfolioConfig.minTradeUSDC, "Smallest on-chain trade amount this NPC will attempt."),
+            Field("Config", "maxTradeUSDC", "Maximum Trade Size", portfolioConfig.maxTradeUSDC, "Largest on-chain trade amount this NPC will attempt."),
+            Field("State", "walletUSDC", "Wallet USDC", portfolioState.walletUSDC, "USDC immediately available in the NPC wallet."),
+            Field("State", "vaultUSDC", "Vault USDC", portfolioState.vaultUSDC, "USDC currently deposited into the vault contract."),
+            Field("State", "livingBudgetUSDC", "Living Budget", portfolioState.livingBudgetUSDC, "Budget currently allocated to living needs."),
+            Field("State", "reserveBudgetUSDC", "Reserve Budget", portfolioState.reserveBudgetUSDC, "Budget currently allocated as safety reserve."),
+            Field("State", "tradingBudgetUSDC", "Trading Budget", portfolioState.tradingBudgetUSDC, "Budget currently available for trade decisions."),
+            Field("State", "TotalUSDC", "Total USDC", portfolioState.TotalUSDC, "Wallet plus vault balance.")
+        };
+    }
+
+    private static NpcFieldDisplayInfo Field(string group, string fieldName, string displayName, float value, string comment)
+    {
+        return new NpcFieldDisplayInfo
+        {
+            group = group,
+            fieldName = fieldName,
+            displayName = displayName,
+            value = value.ToString("0.####"),
+            comment = comment
+        };
     }
 }

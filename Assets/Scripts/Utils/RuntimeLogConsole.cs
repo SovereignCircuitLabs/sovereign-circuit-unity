@@ -7,6 +7,10 @@ using UnityEngine.UI;
 [DisallowMultipleComponent]
 public class RuntimeLogConsole : MonoBehaviour
 {
+    private const int MaxEntries = 120;
+    private const int MaxRenderedCharacters = 18000;
+    private const int MaxMessageLength = 180;
+
     private static readonly Color PanelColor = new Color(0f, 0f, 0f, 0.68f);
     private static readonly Color HandleColor = new Color(1f, 1f, 1f, 0.22f);
     private static readonly Color DefaultColor = new Color(0.86f, 0.9f, 0.96f);
@@ -65,10 +69,11 @@ public class RuntimeLogConsole : MonoBehaviour
 
         entries.Add(new LogEntry
         {
-            Message = Shorten(condition, 240),
+            Message = Shorten(condition, MaxMessageLength),
             Color = ResolveColor(condition, type)
         });
 
+        PruneEntries();
         Render();
     }
 
@@ -181,8 +186,34 @@ public class RuntimeLogConsole : MonoBehaviour
         bool shouldStickToBottom = scrollRect == null || scrollRect.verticalNormalizedPosition <= 0.02f;
 
         builder.Clear();
-        foreach (LogEntry entry in entries)
+        int renderedCharacters = 0;
+        int skippedEntries = 0;
+
+        for (int i = entries.Count - 1; i >= 0; i--)
         {
+            LogEntry entry = entries[i];
+            int entryCharacterCost = entry.Message.Length + 32;
+            if (renderedCharacters + entryCharacterCost > MaxRenderedCharacters)
+            {
+                skippedEntries = i + 1;
+                break;
+            }
+
+            renderedCharacters += entryCharacterCost;
+        }
+
+        if (skippedEntries > 0)
+        {
+            builder.Append("<color=#");
+            builder.Append(ColorUtility.ToHtmlStringRGB(WarningColor));
+            builder.Append(">");
+            builder.Append(skippedEntries);
+            builder.AppendLine(" older log entries hidden to keep UI mesh size safe.</color>");
+        }
+
+        for (int i = skippedEntries; i < entries.Count; i++)
+        {
+            LogEntry entry = entries[i];
             builder.Append("<color=#");
             builder.Append(ColorUtility.ToHtmlStringRGB(entry.Color));
             builder.Append(">");
@@ -271,6 +302,15 @@ public class RuntimeLogConsole : MonoBehaviour
         }
     }
 
+    private void PruneEntries()
+    {
+        int overflow = entries.Count - MaxEntries;
+        if (overflow > 0)
+        {
+            entries.RemoveRange(0, overflow);
+        }
+    }
+
     private void ResetCopyButtonText()
     {
         if (copyButtonText != null)
@@ -292,9 +332,7 @@ public class RuntimeLogConsole : MonoBehaviour
             || message.Contains("Withdraw")
             || message.Contains("bought living supplies")
             || message.Contains("holds:")
-            || message.Contains("tx:")
-            || message.Contains("Registered Actor")
-            || message.Contains("Unregistered Actor");
+            || message.Contains("tx:");
     }
 
     private static Color ResolveColor(string message, LogType type)

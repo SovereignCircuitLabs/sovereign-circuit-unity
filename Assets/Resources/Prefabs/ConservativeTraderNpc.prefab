@@ -576,8 +576,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ab7395f49a7e4b1e92d29162ececd076, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  targetChangeRange: {x: 2, y: 6}
-  wanderRadius: 2
+  targetChangeRange: {x: 3.5, y: 6}
+  wanderRadius: 10
   targetHeight: 0.5
   targetPosition: {x: 0, y: 0, z: 0}
 --- !u!114 &5190661161748614456
