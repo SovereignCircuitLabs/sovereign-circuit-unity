@@ -41,15 +41,6 @@ public class NpcDemoUiDataSource : MonoBehaviour
         RefreshNpcList();
     }
 
-    private void Update()
-    {
-        if (followSelectedNpc && selectedNpc != null && Input.GetKeyDown(KeyCode.F))
-        {
-            followSelectedNpc = false;
-            selectedNpc = null;
-        }
-    }
-
     private void LateUpdate()
     {
         if (followSelectedNpc && selectedNpc != null && followCamera != null)
