@@ -8,6 +8,7 @@ public class DisplayBtn : MonoBehaviour
 
     public RectTransform scrollview;
     public RectTransform popupDetailView;
+    public RectTransform worldEventsView;
 
     private void Start()
     {
@@ -21,10 +22,12 @@ public class DisplayBtn : MonoBehaviour
         {
             popupDetailView.gameObject.SetActive(false);
             scrollview.gameObject.SetActive(false);
+            worldEventsView.gameObject.SetActive(false);
         }
         else
         {
             scrollview.gameObject.SetActive(true);
+            worldEventsView.gameObject.SetActive(true);
         }
     }
 }

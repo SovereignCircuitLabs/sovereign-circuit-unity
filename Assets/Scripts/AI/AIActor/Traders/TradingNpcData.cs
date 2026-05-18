@@ -33,6 +33,44 @@ public class NpcPortfolioConfig
     [Header("Trade Size")]
     public float minTradeUSDC = 0.005f;
     public float maxTradeUSDC = 0.05f;
+
+    public static NpcPortfolioConfig CopyOf(NpcPortfolioConfig source)
+    {
+        NpcPortfolioConfig copy = new NpcPortfolioConfig();
+        if (source == null)
+        {
+            return copy;
+        }
+
+        copy.livingNeedsWeight = source.livingNeedsWeight;
+        copy.reserveWeight = source.reserveWeight;
+        copy.tradingWeight = source.tradingWeight;
+        copy.minimumLivingBudgetUSDC = source.minimumLivingBudgetUSDC;
+        copy.minimumReserveBudgetUSDC = source.minimumReserveBudgetUSDC;
+        copy.rebalanceInterval = source.rebalanceInterval;
+        copy.chainActionCooldown = source.chainActionCooldown;
+        copy.minTradeUSDC = source.minTradeUSDC;
+        copy.maxTradeUSDC = source.maxTradeUSDC;
+        return copy;
+    }
+
+    public void CopyFrom(NpcPortfolioConfig source)
+    {
+        if (source == null)
+        {
+            return;
+        }
+
+        livingNeedsWeight = source.livingNeedsWeight;
+        reserveWeight = source.reserveWeight;
+        tradingWeight = source.tradingWeight;
+        minimumLivingBudgetUSDC = source.minimumLivingBudgetUSDC;
+        minimumReserveBudgetUSDC = source.minimumReserveBudgetUSDC;
+        rebalanceInterval = source.rebalanceInterval;
+        chainActionCooldown = source.chainActionCooldown;
+        minTradeUSDC = source.minTradeUSDC;
+        maxTradeUSDC = source.maxTradeUSDC;
+    }
 }
 
 [Serializable]

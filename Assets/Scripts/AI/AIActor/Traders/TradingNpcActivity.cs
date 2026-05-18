@@ -11,6 +11,7 @@ public enum TradingNpcActivityType
     TradeHold,
     TradeDeposit,
     TradeWithdraw,
+    WorldEventConfigChanged,
     ChainActionFailed
 }
 

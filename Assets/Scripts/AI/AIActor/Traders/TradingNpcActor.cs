@@ -32,6 +32,8 @@ public abstract class TradingNpcActor : AIActor
     private const int MaxActivityLogCount = 100;
     private string currentActivity = "Initializing";
     private string currentMoveTargetName;
+    private NpcPortfolioConfig basePortfolioConfig;
+    private WorldEventManager subscribedWorldEventManager;
 
     public string WalletAddress
     {
@@ -55,6 +57,9 @@ public abstract class TradingNpcActor : AIActor
         brainReady = false;
         contractClient = GetComponent<ArcTradingContractClient>();
         ConfigurePortfolio();
+        CaptureBasePortfolioConfig();
+        SubscribeToWorldEvents();
+        ApplyWorldEventConfig();
 
         try
         {
@@ -97,8 +102,95 @@ public abstract class TradingNpcActor : AIActor
         }
     }
 
+    protected override void OnEnable()
+    {
+        base.OnEnable();
+        SubscribeToWorldEvents();
+        ApplyWorldEventConfig();
+    }
+
+    protected override void OnDisable()
+    {
+        UnsubscribeFromWorldEvents();
+        base.OnDisable();
+    }
+
     protected abstract void ConfigurePortfolio();
     protected abstract TradeDecision DecideTrade();
+
+    private void CaptureBasePortfolioConfig()
+    {
+        basePortfolioConfig = NpcPortfolioConfig.CopyOf(portfolioConfig);
+    }
+
+    private void SubscribeToWorldEvents()
+    {
+        WorldEventManager manager = WorldEventManager.GetOrCreate();
+        if (manager == null || subscribedWorldEventManager == manager)
+        {
+            return;
+        }
+
+        UnsubscribeFromWorldEvents();
+        subscribedWorldEventManager = manager;
+        subscribedWorldEventManager.ActiveEventsChanged += OnWorldEventsChanged;
+    }
+
+    private void UnsubscribeFromWorldEvents()
+    {
+        if (subscribedWorldEventManager == null)
+        {
+            return;
+        }
+
+        subscribedWorldEventManager.ActiveEventsChanged -= OnWorldEventsChanged;
+        subscribedWorldEventManager = null;
+    }
+
+    private void OnWorldEventsChanged(List<ActiveWorldEvent> activeEvents)
+    {
+        ApplyWorldEventConfig();
+        AllocateBudgetsFromBalances();
+        AddActivity(
+            TradingNpcActivityType.WorldEventConfigChanged,
+            "World event config changed",
+            BuildActiveWorldEventSummary(activeEvents));
+    }
+
+    private void ApplyWorldEventConfig()
+    {
+        if (basePortfolioConfig == null)
+        {
+            return;
+        }
+
+        WorldEventManager manager = WorldEventManager.Instance;
+        NpcPortfolioConfig nextConfig = manager != null
+            ? manager.BuildModifiedConfig(basePortfolioConfig)
+            : NpcPortfolioConfig.CopyOf(basePortfolioConfig);
+        portfolioConfig.CopyFrom(nextConfig);
+    }
+
+    private string BuildActiveWorldEventSummary(List<ActiveWorldEvent> activeEvents)
+    {
+        if (activeEvents == null || activeEvents.Count == 0)
+        {
+            return "No active world events; config restored to base values.";
+        }
+
+        string summary = "Active events: ";
+        for (int i = 0; i < activeEvents.Count; i++)
+        {
+            if (i > 0)
+            {
+                summary += ", ";
+            }
+
+            summary += activeEvents[i].displayName;
+        }
+
+        return summary;
+    }
 
     private void InitAI()
     {

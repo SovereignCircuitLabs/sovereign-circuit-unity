@@ -29,7 +29,14 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
     [SerializeField] private Button followButton;
     [SerializeField] private Button focusButton;
 
+    [Header("World Events")]
+    [SerializeField] private WorldEventManager worldEventManager;
+    [SerializeField] private GameObject worldEventPanelRoot;
+    [SerializeField] private Text worldEventStatusText;
+    [SerializeField] private Button clearWorldEventsButton;
+
     private readonly List<GameObject> spawnedNpcButtons = new List<GameObject>();
+    private readonly List<Button> worldEventButtons = new List<Button>();
     private readonly StringBuilder builder = new StringBuilder(4096);
     private float nextRefreshTime;
     private bool followEnabled;
@@ -51,6 +58,11 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
             dataSource = gameObject.AddComponent<NpcDemoUiDataSource>();
         }
 
+        if (worldEventManager == null)
+        {
+            worldEventManager = WorldEventManager.GetOrCreate();
+        }
+
         if (buildUiOnAwake)
         {
             EnsureRuntimeUi();
@@ -69,6 +81,12 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
             dataSource.SelectedNpcSnapshotRefreshed += RenderSnapshot;
         }
 
+        if (worldEventManager != null)
+        {
+            worldEventManager.ActiveEventsChanged += OnWorldEventsChanged;
+            RefreshWorldEventPanel(worldEventManager.GetActiveEvents());
+        }
+
         RefreshNpcList();
     }
 
@@ -79,6 +97,11 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
             dataSource.NpcListChanged -= RebuildNpcButtons;
             dataSource.SelectedNpcChanged -= ShowSnapshotPopup;
             dataSource.SelectedNpcSnapshotRefreshed -= RenderSnapshot;
+        }
+
+        if (worldEventManager != null)
+        {
+            worldEventManager.ActiveEventsChanged -= OnWorldEventsChanged;
         }
     }
 
@@ -91,6 +114,10 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
 
         nextRefreshTime = Time.unscaledTime + Mathf.Max(0.1f, refreshInterval);
         RefreshNpcList();
+        if (worldEventManager != null)
+        {
+            RefreshWorldEventPanel(worldEventManager.GetActiveEvents());
+        }
 
         if (popupRoot != null && popupRoot.activeSelf)
         {
@@ -313,6 +340,111 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
             focusButton.onClick.RemoveAllListeners();
             focusButton.onClick.AddListener(() => dataSource.FocusSelectedNpcOnce());
         }
+
+        BindWorldEventButtons();
+    }
+
+    private void BindWorldEventButtons()
+    {
+        if (worldEventManager == null)
+        {
+            return;
+        }
+
+        IReadOnlyList<WorldEventDefinition> definitions = worldEventManager.EventDefinitions;
+        for (int i = 0; i < worldEventButtons.Count; i++)
+        {
+            Button button = worldEventButtons[i];
+            if (button == null || i >= definitions.Count || definitions[i] == null)
+            {
+                continue;
+            }
+
+            WorldEventType eventType = definitions[i].type;
+            button.onClick.RemoveAllListeners();
+            button.onClick.AddListener(() => ToggleWorldEvent(eventType));
+        }
+
+        if (clearWorldEventsButton != null)
+        {
+            clearWorldEventsButton.onClick.RemoveAllListeners();
+            clearWorldEventsButton.onClick.AddListener(ClearWorldEvents);
+        }
+    }
+
+    private void ToggleWorldEvent(WorldEventType eventType)
+    {
+        if (worldEventManager == null)
+        {
+            worldEventManager = WorldEventManager.GetOrCreate();
+        }
+
+        worldEventManager.ToggleEvent(eventType);
+    }
+
+    private void ClearWorldEvents()
+    {
+        if (worldEventManager != null)
+        {
+            worldEventManager.ClearEvents();
+        }
+    }
+
+    private void OnWorldEventsChanged(List<ActiveWorldEvent> activeEvents)
+    {
+        RefreshWorldEventPanel(activeEvents);
+        RefreshNpcList();
+
+        if (popupRoot != null && popupRoot.activeSelf && dataSource != null)
+        {
+            dataSource.RefreshSelectedNpcDetails();
+        }
+    }
+
+    private void RefreshWorldEventPanel(List<ActiveWorldEvent> activeEvents)
+    {
+        if (worldEventManager == null)
+        {
+            return;
+        }
+
+        if (worldEventStatusText != null)
+        {
+            builder.Length = 0;
+            builder.AppendLine("Active World Events");
+
+            if (activeEvents == null || activeEvents.Count == 0)
+            {
+                builder.AppendLine("None");
+            }
+            else
+            {
+                for (int i = 0; i < activeEvents.Count; i++)
+                {
+                    ActiveWorldEvent activeEvent = activeEvents[i];
+                    builder.AppendLine($"{activeEvent.displayName} ({Time.time - activeEvent.startedGameTime:0}s)");
+                }
+            }
+
+            worldEventStatusText.text = builder.ToString();
+        }
+
+        IReadOnlyList<WorldEventDefinition> definitions = worldEventManager.EventDefinitions;
+        for (int i = 0; i < worldEventButtons.Count; i++)
+        {
+            Button button = worldEventButtons[i];
+            if (button == null || i >= definitions.Count || definitions[i] == null)
+            {
+                continue;
+            }
+
+            bool active = worldEventManager.IsEventActive(definitions[i].type);
+            Text label = button.GetComponentInChildren<Text>(true);
+            if (label != null)
+            {
+                label.text = active ? $"Disable\n{definitions[i].displayName}" : $"Enable\n{definitions[i].displayName}";
+            }
+        }
     }
 
     private void ToggleFollowSelectedNpc()
@@ -351,10 +483,48 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
             CreateNpcScrollView(canvas.transform);
         }
 
+        if (worldEventPanelRoot == null)
+        {
+            CreateWorldEventPanel(canvas.transform);
+        }
+        
+        CreateWorldEventsButtons();
+
         if (popupRoot == null)
         {
             CreatePopup(canvas.transform);
         }
+    }
+
+    private void CreateWorldEventsButtons()
+    {
+        const float buttonLeft = 12f;
+        const float buttonWidth = 136f;
+        const float buttonColumnSpacing = 148f;
+        const float buttonTop = -196f;
+        const float buttonHeight = 32f;
+        const float buttonRowSpacing = 38f;
+
+        IReadOnlyList<WorldEventDefinition> definitions = worldEventManager.EventDefinitions;
+        for (int i = 0; i < definitions.Count; i++)
+        {
+            int column = i % 2;
+            int row = i / 2;
+            Button button = CreateSmallButton($"World Event {definitions[i].type} Button", worldEventPanelRoot.transform, definitions[i].displayName);
+            SetAnchors(
+                button.GetComponent<RectTransform>(),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(buttonLeft + column * buttonColumnSpacing, buttonTop - buttonHeight - row * buttonRowSpacing),
+                new Vector2(buttonLeft + buttonWidth + column * buttonColumnSpacing, buttonTop - row * buttonRowSpacing));
+            worldEventButtons.Add(button);
+        }
+
+        clearWorldEventsButton = CreateSmallButton("Clear World Events Button", worldEventPanelRoot.transform, "Clear");
+        SetAnchors(clearWorldEventsButton.GetComponent<RectTransform>(), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-84f, 10f), new Vector2(-12f, 38f));
+
+        BindWorldEventButtons();
+        RefreshWorldEventPanel(worldEventManager.GetActiveEvents());
     }
 
     private void CreateNpcScrollView(Transform parent)
@@ -410,6 +580,27 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
         npcScrollRect.horizontal = false;
         npcScrollRect.vertical = true;
         npcScrollRect.movementType = ScrollRect.MovementType.Clamped;
+    }
+
+    private void CreateWorldEventPanel(Transform parent)
+    {
+        worldEventPanelRoot = CreatePanel("World Event Panel", parent, new Color(0.05f, 0.055f, 0.06f, 0.90f));
+        RectTransform panelRect = worldEventPanelRoot.GetComponent<RectTransform>();
+        SetAnchors(panelRect, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-332f, -202f), new Vector2(-16f, -16f));
+
+        Text title = CreateText("Title", worldEventPanelRoot.transform, "World Events", 18, FontStyle.Bold, TextAnchor.MiddleLeft);
+        SetAnchors(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(12f, -36f), new Vector2(-12f, -8f));
+
+        worldEventStatusText = CreateText("Active Events", worldEventPanelRoot.transform, "", 12, FontStyle.Normal, TextAnchor.UpperLeft);
+        SetAnchors(worldEventStatusText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(12f, -188f), new Vector2(-12f, -88f));
+
+        worldEventButtons.Clear();
+        if (worldEventManager == null)
+        {
+            worldEventManager = WorldEventManager.GetOrCreate();
+        }
+        
+        RefreshWorldEventPanel(worldEventManager.GetActiveEvents());
     }
 
     private Button CreateDefaultNpcButton(Transform parent)
