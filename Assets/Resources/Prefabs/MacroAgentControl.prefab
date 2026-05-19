@@ -1871,6 +1871,72 @@ MonoBehaviour:
     m_VerticalOverflow: 0
     m_LineSpacing: 1
   m_Text: 'Latest Reasoning:'
+--- !u!1 &4962072141929454335
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6421866085560278502}
+  - component: {fileID: 7329296090766626540}
+  m_Layer: 0
+  m_Name: Agent
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6421866085560278502
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4962072141929454335}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6308786432100017623}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7329296090766626540
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4962072141929454335}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ca26a9fd8917ba04c9ba7b5dcd8b987a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  persistAcrossScenes: 1
+  inspectorSettings:
+    provider: 3
+    openAiApiKey: 
+    openAiModel: gpt-4o-mini
+    openAiBaseUrl: https://api.openai.com/v1
+    geminiApiKey: 
+    geminiModel: gemini-1.5-flash
+    geminiBaseUrl: https://generativelanguage.googleapis.com/v1beta
+    claudeApiKey: 
+    claudeModel: claude-sonnet-4-6
+    claudeBaseUrl: https://api.anthropic.com/v1
+    claudeVersion: 2023-06-01
+    deepseekApiKey: sk-f0e3e7da5fca4f7082d465f1cd85296e
+    deepseekModel: deepseek-chat
+    deepseekBaseUrl: https://api.deepseek.com/v1
+    pollIntervalSeconds: 30
+    maxToolCallIterations: 4
+    requestTimeoutSeconds: 60
+    enableMcpTools: 1
+    autoStart: 0
+    systemPromptOverride: 
 --- !u!1 &5013421606820384936
 GameObject:
   m_ObjectHideFlags: 0
@@ -3944,6 +4010,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 6421866085560278502}
   - {fileID: 774214576552010428}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -3960,9 +4027,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   togglePanelKey: 9
-  showOnStart: 0
-  uiFont: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-  agent: {fileID: 0}
+  showOnStart: 1
   panelRoot: {fileID: 5013421606820384936}
   apiKeyInput: {fileID: 8250393295349552367}
   modelInput: {fileID: 7933248873706221463}
@@ -3978,7 +4043,6 @@ MonoBehaviour:
   stopButton: {fileID: 7200561648057145258}
   runOnceButton: {fileID: 2382642874120022063}
   saveButton: {fileID: 1527577990952981350}
-  nextRefreshTime: 0
 --- !u!1 &8831177707570731703
 GameObject:
   m_ObjectHideFlags: 0

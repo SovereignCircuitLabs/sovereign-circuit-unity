@@ -43,18 +43,6 @@ namespace ArcTrading.MacroAgent
         public McpToolRegistry ToolRegistry { get { return toolRegistry; } }
         public EconomySnapshotCollector Collector { get { return collector; } }
 
-        public static MacroEconomyAgent GetOrCreate()
-        {
-            MacroEconomyAgent agent = Instance;
-            if (agent != null)
-            {
-                return agent;
-            }
-
-            GameObject host = new GameObject("Macro Economy Agent");
-            return host.AddComponent<MacroEconomyAgent>();
-        }
-
         protected override void Awake()
         {
             base.Awake();
@@ -62,9 +50,8 @@ namespace ArcTrading.MacroAgent
             {
                 DontDestroyOnLoad(gameObject);
             }
-
-            MacroAgentSettings stored = MacroAgentSettings.LoadOrDefault();
-            runtimeSettings = MergeWithInspector(stored, inspectorSettings);
+            
+            LoadRuntimeSettings();
             collector = new EconomySnapshotCollector();
             toolRegistry = new McpToolRegistry(collector);
             applier = new MacroPolicyApplier();
@@ -76,6 +63,12 @@ namespace ArcTrading.MacroAgent
             {
                 StartAgent();
             }
+        }
+
+        public void LoadRuntimeSettings()
+        {
+            MacroAgentSettings stored = MacroAgentSettings.LoadOrDefault();
+            runtimeSettings = MergeWithInspector(stored, inspectorSettings);
         }
 
         public void UpdateSettings(MacroAgentSettings newSettings, bool saveToDisk)
@@ -362,6 +355,25 @@ namespace ArcTrading.MacroAgent
             {
                 stored.systemPromptOverride = inspector.systemPromptOverride;
             }
+            
+            stored.provider = inspector.provider;
+            
+            stored.openAiApiKey = inspector.openAiApiKey;
+            stored.openAiModel = inspector.openAiModel;
+            stored.openAiBaseUrl = inspector.openAiBaseUrl;
+            
+            stored.claudeApiKey = inspector.claudeApiKey;
+            stored.claudeModel = inspector.claudeModel;
+            stored.claudeBaseUrl = inspector.claudeBaseUrl;
+            stored.claudeVersion = inspector.claudeVersion;
+            
+            stored.geminiApiKey = inspector.geminiApiKey;
+            stored.geminiModel = inspector.geminiModel;
+            stored.geminiBaseUrl = inspector.geminiBaseUrl;
+            
+            stored.deepseekApiKey = inspector.deepseekApiKey;
+            stored.deepseekModel = inspector.deepseekModel;
+            stored.deepseekBaseUrl = inspector.deepseekBaseUrl;
 
             if (stored.pollIntervalSeconds <= 0f)
             {
