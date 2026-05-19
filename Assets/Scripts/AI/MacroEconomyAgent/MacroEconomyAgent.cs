@@ -355,25 +355,6 @@ namespace ArcTrading.MacroAgent
             {
                 stored.systemPromptOverride = inspector.systemPromptOverride;
             }
-            
-            stored.provider = inspector.provider;
-            
-            stored.openAiApiKey = inspector.openAiApiKey;
-            stored.openAiModel = inspector.openAiModel;
-            stored.openAiBaseUrl = inspector.openAiBaseUrl;
-            
-            stored.claudeApiKey = inspector.claudeApiKey;
-            stored.claudeModel = inspector.claudeModel;
-            stored.claudeBaseUrl = inspector.claudeBaseUrl;
-            stored.claudeVersion = inspector.claudeVersion;
-            
-            stored.geminiApiKey = inspector.geminiApiKey;
-            stored.geminiModel = inspector.geminiModel;
-            stored.geminiBaseUrl = inspector.geminiBaseUrl;
-            
-            stored.deepseekApiKey = inspector.deepseekApiKey;
-            stored.deepseekModel = inspector.deepseekModel;
-            stored.deepseekBaseUrl = inspector.deepseekBaseUrl;
 
             if (stored.pollIntervalSeconds <= 0f)
             {

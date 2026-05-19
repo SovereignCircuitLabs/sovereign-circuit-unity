@@ -1928,7 +1928,7 @@ MonoBehaviour:
     claudeModel: claude-sonnet-4-6
     claudeBaseUrl: https://api.anthropic.com/v1
     claudeVersion: 2023-06-01
-    deepseekApiKey: sk-f0e3e7da5fca4f7082d465f1cd85296e
+    deepseekApiKey: 
     deepseekModel: deepseek-chat
     deepseekBaseUrl: https://api.deepseek.com/v1
     pollIntervalSeconds: 30
