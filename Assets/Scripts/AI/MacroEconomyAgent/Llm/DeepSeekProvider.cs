@@ -18,7 +18,7 @@ namespace ArcTrading.MacroAgent.Llm
             string resolvedBase = string.IsNullOrEmpty(baseUrl)
                 ? "https://api.deepseek.com/v1"
                 : baseUrl;
-            string resolvedModel = string.IsNullOrEmpty(model) ? "deepseek-chat" : model;
+            string resolvedModel = string.IsNullOrEmpty(model) ? "deepseek-v4-pro" : model;
             inner = new OpenAiProvider(apiKey, resolvedModel, resolvedBase);
         }
 
