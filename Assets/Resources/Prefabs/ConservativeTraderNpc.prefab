@@ -395,6 +395,7 @@ GameObject:
   - component: {fileID: 2518774445441662990}
   - component: {fileID: 8197735506548674305}
   - component: {fileID: 9215966450908659434}
+  - component: {fileID: 3134242969745110797}
   - component: {fileID: 8714362781716931100}
   - component: {fileID: 5461816793476226999}
   - component: {fileID: 3004487303847187544}
@@ -511,6 +512,23 @@ MonoBehaviour:
   rpcUrl: https://rpc.testnet.arc.network
   contractAddress: 0x5BE62566a1748de167165fB91C67cFB2BD37bFf0
   privateKey: 0xb7198b4fef9779043351fc5afce1ca6e4a85e58f4cdfea00d46e7e3ec6e8e2c6
+--- !u!114 &3134242969745110797
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2712092933089076963}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ade8ba009ed9b9240ae65de4db56ad55, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  rpcUrl: https://rpc.testnet.arc.network
+  fallbackChainId: 5042002
+  authorizationTtlSeconds: 120
+  httpTimeoutSeconds: 20
+  verboseLogging: 0
 --- !u!114 &8714362781716931100
 MonoBehaviour:
   m_ObjectHideFlags: 0
