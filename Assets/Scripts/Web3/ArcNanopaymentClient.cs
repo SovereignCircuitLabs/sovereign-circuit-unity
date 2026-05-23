@@ -14,7 +14,8 @@ using Newtonsoft.Json.Linq;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace ArcTrading.MacroAgent
+// nanopayments - buyer/client
+namespace ArcTrading.Nanopayment
 {
     [Struct("TransferWithAuthorization")]
     public class TransferWithAuthorizationMessage
@@ -22,13 +23,18 @@ namespace ArcTrading.MacroAgent
         [Parameter("address", "from", 1)] public string From { get; set; }
         [Parameter("address", "to", 2)] public string To { get; set; }
         [Parameter("uint256", "value", 3)] public BigInteger Value { get; set; }
-        [Parameter("uint256", "validAfter", 4)] public BigInteger ValidAfter { get; set; }
-        [Parameter("uint256", "validBefore", 5)] public BigInteger ValidBefore { get; set; }
+
+        [Parameter("uint256", "validAfter", 4)]
+        public BigInteger ValidAfter { get; set; }
+
+        [Parameter("uint256", "validBefore", 5)]
+        public BigInteger ValidBefore { get; set; }
+
         [Parameter("bytes32", "nonce", 6)] public byte[] Nonce { get; set; }
     }
 
     [RequireComponent(typeof(ArcTradingContractClient))]
-    public class ArcNanopaymentClient : MonoBehaviour
+    public partial class ArcNanopaymentClient : MonoBehaviour
     {
         private const string PaymentRequiredHeader = "PAYMENT-REQUIRED";
         private const string PaymentSignatureHeader = "PAYMENT-SIGNATURE";
@@ -37,8 +43,7 @@ namespace ArcTrading.MacroAgent
         private const string DomainVersion = "1";
         private const string PrimaryType = "TransferWithAuthorization";
 
-        [Header("Configuration")]
-        [SerializeField] private string rpcUrl = "https://rpc.testnet.arc.network";
+        [Header("Configuration")] 
         [SerializeField] private long fallbackChainId = 5042002;
         [SerializeField] private int authorizationTtlSeconds = 120;
         [SerializeField] private int httpTimeoutSeconds = 20;
@@ -140,7 +145,8 @@ namespace ArcTrading.MacroAgent
                 spec.Value<string>("maxAmountRequired"),
                 spec.Value<string>("value"));
             if (string.IsNullOrEmpty(amountString)
-                || !BigInteger.TryParse(amountString, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+                || !BigInteger.TryParse(amountString, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                    out var value))
             {
                 throw new InvalidOperationException($"Invalid amount '{amountString}'.");
             }
@@ -176,8 +182,8 @@ namespace ArcTrading.MacroAgent
             {
                 Domain = new Domain
                 {
-                    Name = DomainName,
-                    Version = DomainVersion,
+                    Name = extra.Value<string>("name") ?? DomainName,
+                    Version = extra.Value<string>("version") ?? DomainVersion,
                     ChainId = new BigInteger(chainId),
                     VerifyingContract = verifyingContract
                 },
@@ -192,7 +198,7 @@ namespace ArcTrading.MacroAgent
             // Circle x402 payload
             var payload = new JObject
             {
-                ["x402Version"] = 1,
+                ["x402Version"] = 2,
                 ["scheme"] = spec.Value<string>("scheme") ?? "exact",
                 ["network"] = spec.Value<string>("network") ?? "arc-testnet",
                 ["payload"] = new JObject
@@ -224,18 +230,31 @@ namespace ArcTrading.MacroAgent
             {
                 json = headerValue; // Fallback handling: some gateways may return raw JSON directly
             }
+
             return JObject.Parse(json);
         }
 
         private static void ValidateSettlement(string headerValue)
         {
             string json;
-            try { json = Encoding.UTF8.GetString(Convert.FromBase64String(headerValue)); }
-            catch (FormatException) { json = headerValue; }
+            try
+            {
+                json = Encoding.UTF8.GetString(Convert.FromBase64String(headerValue));
+            }
+            catch (FormatException)
+            {
+                json = headerValue;
+            }
 
             JObject settlement;
-            try { settlement = JObject.Parse(json); }
-            catch (JsonReaderException) { return; }
+            try
+            {
+                settlement = JObject.Parse(json);
+            }
+            catch (JsonReaderException)
+            {
+                return;
+            }
 
             var success = settlement.Value<bool?>("success")
                           ?? settlement.Value<bool?>("settled")
@@ -252,6 +271,7 @@ namespace ArcTrading.MacroAgent
             {
                 if (!string.IsNullOrEmpty(candidates[i])) return candidates[i];
             }
+
             return null;
         }
 

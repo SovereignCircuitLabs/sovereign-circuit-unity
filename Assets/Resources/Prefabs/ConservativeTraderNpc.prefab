@@ -510,7 +510,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  contractAddress: 0x5BE62566a1748de167165fB91C67cFB2BD37bFf0
+  contractAddress: 0x211796A3AE23F223F0c6536875595Cbbcb18E973
   privateKey: 0xb7198b4fef9779043351fc5afce1ca6e4a85e58f4cdfea00d46e7e3ec6e8e2c6
 --- !u!114 &3134242969745110797
 MonoBehaviour:
@@ -524,7 +524,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ade8ba009ed9b9240ae65de4db56ad55, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rpcUrl: https://rpc.testnet.arc.network
   fallbackChainId: 5042002
   authorizationTtlSeconds: 120
   httpTimeoutSeconds: 20
