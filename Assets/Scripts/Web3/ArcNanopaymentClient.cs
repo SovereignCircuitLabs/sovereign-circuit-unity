@@ -9,6 +9,7 @@ using Nethereum.ABI.FunctionEncoding.Attributes;
 using Nethereum.Hex.HexConvertors.Extensions;
 using Nethereum.Signer;
 using Nethereum.Signer.EIP712;
+using Nethereum.Web3;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
@@ -42,19 +43,40 @@ namespace ArcTrading.Nanopayment
         private const string DomainName = "GatewayWalletBatched";
         private const string DomainVersion = "1";
         private const string PrimaryType = "TransferWithAuthorization";
+        
+        private const int authorizationTtlSeconds = 604900;
 
         [Header("Configuration")] 
+        [SerializeField] private string x402ServerUrl = "http://localhost:4021/risk-profile";
         [SerializeField] private long fallbackChainId = 5042002;
-        [SerializeField] private int authorizationTtlSeconds = 120;
         [SerializeField] private int httpTimeoutSeconds = 20;
         [SerializeField] private bool verboseLogging = false;
+        
+        [ContextMenu("Fetch Paywalled Resource Test")]
+        public async void FetchPaywalledResourceTest()
+        {
+            tradingContractClient = GetComponent<ArcTradingContractClient>();
+            rpcUrl = tradingContractClient.RpcUrl;
+            privateKey = tradingContractClient.PrivateKey;
+            gatewayReadOnlyWeb3 = new Web3(rpcUrl);
 
-        public async Task<string> FetchPaywalledResourceAsync(string url, string npcPrivateKey)
+            await ApproveIfNeededThenGatewayDepositAsync(1); // deposit 1 usdc into gateway
+
+            var content = await FetchPaywalledResourceAsync(
+                x402ServerUrl,
+                tradingContractClient.PrivateKey,
+                Erc20UsdcHelper.ParseUsdc(0.5m));
+            Debug.Log($"Fetched content: {content}");
+        }
+        
+        public async Task<string> FetchPaywalledResourceAsync(string url, string npcPrivateKey, BigInteger maxPaymentAmount)
         {
             if (string.IsNullOrWhiteSpace(url))
                 throw new ArgumentException("url is required", nameof(url));
             if (string.IsNullOrWhiteSpace(npcPrivateKey))
                 throw new ArgumentException("npcPrivateKey is required", nameof(npcPrivateKey));
+            if (maxPaymentAmount <= BigInteger.Zero)
+                throw new ArgumentOutOfRangeException(nameof(maxPaymentAmount), "maxPaymentAmount must be positive (smallest token units).");
 
             // Step 1 — Initiate the initial request and expect a 402 payment challenge
             using (var probe = UnityWebRequest.Get(url))
@@ -84,7 +106,7 @@ namespace ArcTrading.Nanopayment
                     Debug.Log($"[ArcNanopayment] Paywall challenge: {requirements.ToString(Formatting.None)}");
 
                 // Step 3 — Perform local off-chain EIP-3009 signature generation
-                var signedJson = GenerateEip3009Signature(npcPrivateKey, requirements);
+                var signedJson = GenerateEip3009Signature(npcPrivateKey, requirements, maxPaymentAmount);
                 var paymentSignatureHeader = Convert.ToBase64String(Encoding.UTF8.GetBytes(signedJson));
 
                 // Step 4 — Reattach the PAYMENT-SIGNATURE header and retry the HTTP request
@@ -117,7 +139,7 @@ namespace ArcTrading.Nanopayment
             }
         }
 
-        private string GenerateEip3009Signature(string privateKey, JObject paymentRequirements)
+        private string GenerateEip3009Signature(string privateKey, JObject paymentRequirements, BigInteger maxPaymentAmount)
         {
             if (paymentRequirements == null) throw new ArgumentNullException(nameof(paymentRequirements));
 
@@ -139,17 +161,31 @@ namespace ArcTrading.Nanopayment
             var payTo = spec.Value<string>("payTo");
             if (string.IsNullOrEmpty(payTo))
                 throw new InvalidOperationException("payTo missing in payment requirements.");
-
-            var amountString = FirstNonEmpty(
+            
+            // Server-priced (x402 standard): the server tells us the exact amount, we sign for that.
+            // The NPC-supplied paymentAmount acts as an upper bound — refuse to overpay past it.
+            var requiredString = FirstNonEmpty(
                 spec.Value<string>("amount"),
                 spec.Value<string>("maxAmountRequired"),
                 spec.Value<string>("value"));
-            if (string.IsNullOrEmpty(amountString)
-                || !BigInteger.TryParse(amountString, NumberStyles.Integer, CultureInfo.InvariantCulture,
-                    out var value))
+            if (string.IsNullOrEmpty(requiredString)
+                || !BigInteger.TryParse(requiredString, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                    out var required))
             {
-                throw new InvalidOperationException($"Invalid amount '{amountString}'.");
+                throw new InvalidOperationException(
+                    $"Server did not specify a payment amount in PAYMENT-REQUIRED ('{requiredString}').");
             }
+            
+            // maxPaymentAmount is the NPC's upper bound (smallest token units).
+            // The server determines the actual price via the 402 PAYMENT-REQUIRED header;
+            // we refuse to sign if it exceeds this cap.
+            if (required > maxPaymentAmount)
+            {
+                throw new InvalidOperationException(
+                    $"Server-required {required} exceeds NPC max {maxPaymentAmount}; refusing to sign.");
+            }
+
+            var value = required;
 
             var chainId = spec.Value<long?>("chainId")
                           ?? extra.Value<long?>("chainId")
