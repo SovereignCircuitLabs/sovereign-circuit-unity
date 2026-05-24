@@ -10,6 +10,9 @@ public class DisplayBtn : MonoBehaviour
     public RectTransform popupDetailView;
     public RectTransform worldEventsView;
 
+    public RectTransform agentView;
+    public bool isMacroAgentBtn = false;
+
     private void Start()
     {
         btn = GetComponent<Button>();
@@ -18,16 +21,30 @@ public class DisplayBtn : MonoBehaviour
 
     private void OnBtnClicked()
     {
-        if (scrollview.gameObject.activeSelf)
+        if (!isMacroAgentBtn)
         {
-            popupDetailView.gameObject.SetActive(false);
-            scrollview.gameObject.SetActive(false);
-            worldEventsView.gameObject.SetActive(false);
+            if (scrollview.gameObject.activeSelf)
+            {
+                popupDetailView.gameObject.SetActive(false);
+                scrollview.gameObject.SetActive(false);
+                worldEventsView.gameObject.SetActive(false);
+            }
+            else
+            {
+                scrollview.gameObject.SetActive(true);
+                worldEventsView.gameObject.SetActive(true);
+            }
         }
         else
         {
-            scrollview.gameObject.SetActive(true);
-            worldEventsView.gameObject.SetActive(true);
+            if (agentView.gameObject.activeSelf)
+            {
+                agentView.gameObject.SetActive(false);
+            }
+            else
+            {
+                agentView.gameObject.SetActive(true);
+            }
         }
     }
 }

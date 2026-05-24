@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using CleverCrow.Fluid.BTs.Trees;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 using BtTaskStatus = CleverCrow.Fluid.BTs.Tasks.TaskStatus;
 
@@ -12,6 +13,7 @@ public abstract class TradingNpcActor : AIActor
     public TradingNpcArchetype archetype = TradingNpcArchetype.BalancedTrader;
     public NpcPortfolioConfig portfolioConfig = new NpcPortfolioConfig();
     public NpcPortfolioState portfolioState = new NpcPortfolioState();
+    [SerializeField] private bool useNanopayment = false;
 
     [Header("World Targets")]
     [SerializeField] private Transform marketPoint;
@@ -337,7 +339,9 @@ public abstract class TradingNpcActor : AIActor
                 return;
             }
 
+            string txResult = null;
             string txHash = null;
+            TradingNpcActivityType activityType = TradingNpcActivityType.TradeHold;
             if (decision.intent == TradeIntent.Deposit)
             {
                 amount = Mathf.Min(amount, portfolioState.walletUSDC - portfolioState.reserveBudgetUSDC);
@@ -346,9 +350,17 @@ public abstract class TradingNpcActor : AIActor
                     return;
                 }
 
-                txHash = await contractClient.DepositAsync((decimal)amount);
-                portfolioState.walletUSDC -= amount;
-                portfolioState.vaultUSDC += amount;
+                txResult = await contractClient.DepositAsync((decimal)amount, useNanopayment);
+                txHash = useNanopayment ? ExtractX402Tx(txResult) : txResult;
+                if (!useNanopayment)
+                {
+                    portfolioState.walletUSDC -= amount;
+                    portfolioState.vaultUSDC += amount;
+                }
+
+                activityType = useNanopayment
+                    ? TradingNpcActivityType.TradeDepositNanopayment
+                    : TradingNpcActivityType.TradeDeposit;
             }
             else if (decision.intent == TradeIntent.Withdraw)
             {
@@ -358,20 +370,26 @@ public abstract class TradingNpcActor : AIActor
                     return;
                 }
 
-                txHash = await contractClient.WithdrawAsync((decimal)amount);
+                txResult = await contractClient.WithdrawAsync((decimal)amount);
+                txHash = txResult;
                 portfolioState.walletUSDC += amount;
-                portfolioState.vaultUSDC -= amount;
+                portfolioState.vaultUSDC -= amount;;
+
+                activityType = TradingNpcActivityType.TradeWithdraw;
             }
 
             lastChainActionTime = Time.time;
-            currentActivity = $"{decision.intent} {amount:0.####} USDC";
+            string modeTag = useNanopayment ? " (nanopayment)" : "";
+            currentActivity = $"{decision.intent}{modeTag} {amount:0.####} USDC";
             AddActivity(
-                decision.intent == TradeIntent.Deposit ? TradingNpcActivityType.TradeDeposit : TradingNpcActivityType.TradeWithdraw,
+                activityType,
                 currentActivity,
                 decision.reason,
                 txHash,
                 amount);
-            Debug.Log($"{LogPrefix} {decision.intent} {amount:0.####} USDC, reason={decision.reason}, tx={txHash}");
+            
+            await RefreshBalancesAsync();
+            Debug.Log($"{LogPrefix} {decision.intent}{modeTag} {amount:0.####} USDC, reason={decision.reason}, tx={txHash}");
         });
     }
 
@@ -404,7 +422,9 @@ public abstract class TradingNpcActor : AIActor
     private async Task RefreshBalancesAsync()
     {
         portfolioState.walletUSDC = (float)await contractClient.GetWalletBalanceUSDCAsync();
-        portfolioState.vaultUSDC = (float)await contractClient.GetVaultBalanceUSDCAsync();
+        portfolioState.vaultUSDC = (float)await contractClient.GetVaultBalanceUSDCAsync() + 
+                                   (float) await contractClient.GetGatewayAvailableBalanceUSDCAsync(contractClient.ContractAddress);
+        portfolioState.gatewayUSDC = (float)await contractClient.GetGatewayAvailableBalanceUSDCAsync();
     }
 
     private void AllocateBudgetsFromBalances()
@@ -579,11 +599,26 @@ public abstract class TradingNpcActor : AIActor
             Field("Config", "maxTradeUSDC", "Maximum Trade Size", portfolioConfig.maxTradeUSDC, "Largest on-chain trade amount this NPC will attempt."),
             Field("State", "walletUSDC", "Wallet USDC", portfolioState.walletUSDC, "USDC immediately available in the NPC wallet."),
             Field("State", "vaultUSDC", "Vault USDC", portfolioState.vaultUSDC, "USDC currently deposited into the vault contract."),
+            Field("State", "gatewayUSDC", "Gateway USDC", portfolioState.gatewayUSDC, "USDC available in the Circle Gateway Wallet for x402 nanopayments."),
             Field("State", "livingBudgetUSDC", "Living Budget", portfolioState.livingBudgetUSDC, "Budget currently allocated to living needs."),
             Field("State", "reserveBudgetUSDC", "Reserve Budget", portfolioState.reserveBudgetUSDC, "Budget currently allocated as safety reserve."),
             Field("State", "tradingBudgetUSDC", "Trading Budget", portfolioState.tradingBudgetUSDC, "Budget currently available for trade decisions."),
-            Field("State", "TotalUSDC", "Total USDC", portfolioState.TotalUSDC, "Wallet plus vault balance.")
+            Field("State", "TotalUSDC", "Total USDC", portfolioState.TotalUSDC, "Wallet plus vault plus gateway balance.")
         };
+    }
+
+    private static string ExtractX402Tx(string json)
+    {
+        if (string.IsNullOrEmpty(json)) return null;
+        try { return JObject.Parse(json).Value<string>("x402_tx"); }
+        catch (Exception) { return json; }
+    }
+
+    private static string ExtractX402Amount(string json)
+    {
+        if (string.IsNullOrEmpty(json)) return null;
+        try { return JObject.Parse(json).Value<string>("amount"); }
+        catch (Exception) { return json; }
     }
 
     private static NpcFieldDisplayInfo Field(string group, string fieldName, string displayName, float value, string comment)

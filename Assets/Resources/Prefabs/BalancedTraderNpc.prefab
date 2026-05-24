@@ -770,8 +770,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ade8ba009ed9b9240ae65de4db56ad55, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  x402ServerUrl: http://localhost:4021/risk-profile
   fallbackChainId: 5042002
-  authorizationTtlSeconds: 120
   httpTimeoutSeconds: 20
   verboseLogging: 0
 --- !u!114 &59587337143748919
@@ -802,9 +802,11 @@ MonoBehaviour:
   portfolioState:
     walletUSDC: 0
     vaultUSDC: 0
+    gatewayUSDC: 0
     livingBudgetUSDC: 0
     reserveBudgetUSDC: 0
     tradingBudgetUSDC: 0
+  useNanopayment: 1
   marketPoint: {fileID: 0}
   shopPoint: {fileID: 0}
   homePoint: {fileID: 0}
