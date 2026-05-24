@@ -1,6 +1,7 @@
 using System;
 using System.Numerics;
 using System.Threading.Tasks;
+using ArcTrading.Nanopayment;
 using Nethereum.Hex.HexTypes;
 using Nethereum.Web3;
 using Nethereum.Web3.Accounts;
@@ -29,6 +30,13 @@ public class ArcTradingContractClient : MonoBehaviour
     ]";
 
     private Web3 readOnlyWeb3;
+
+    // Gateway batch-settlement reconciliation. The on-chain availableBalance lags any x402
+    // authorizations we've already signed, so we track unsettled outflows locally and subtract
+    // them when reporting the gateway balance to the UI.
+    private decimal lastKnownOnchainGatewayUsdc;
+    private decimal pendingX402OutflowUsdc;
+    private bool gatewayBaselineInitialized;
 
     public string WalletAddress { get; private set; }
 
@@ -68,10 +76,74 @@ public class ArcTradingContractClient : MonoBehaviour
         return FromUsdc(balance);
     }
 
-    public async Task<string> DepositAsync(decimal amountUSDC)
+    public async Task<decimal> GetGatewayAvailableBalanceUSDCAsync()
+    {
+        var arcNanopayment = GetComponent<ArcNanopaymentClient>();
+        if (arcNanopayment == null) return 0m;
+
+        var web3 = await CreateSignedWeb3Async();
+        var balance = await arcNanopayment.GatewayAvailableBalanceAsync(
+            Erc20UsdcHelper.ArcUsdcAddress,
+            web3.TransactionManager.Account.Address);
+        var onchain = FromUsdc(balance);
+        
+        if (gatewayBaselineInitialized && onchain < lastKnownOnchainGatewayUsdc)
+        {
+            var settled = lastKnownOnchainGatewayUsdc - onchain;
+            pendingX402OutflowUsdc = pendingX402OutflowUsdc > settled
+                ? pendingX402OutflowUsdc - settled
+                : 0m;
+        }
+
+        lastKnownOnchainGatewayUsdc = onchain;
+        gatewayBaselineInitialized = true;
+
+        var effective = onchain - pendingX402OutflowUsdc;
+        return effective < 0m ? 0m : effective;
+    }
+
+    private void RecordX402Outflow(BigInteger paidSmallestUnits)
+    {
+        if (paidSmallestUnits <= BigInteger.Zero) return;
+        pendingX402OutflowUsdc += FromUsdc(paidSmallestUnits);
+    }
+
+    public async Task<decimal> GetGatewayAvailableBalanceUSDCAsync(string address)
+    {
+        var arcNanopayment = GetComponent<ArcNanopaymentClient>();
+        if (arcNanopayment == null) return 0m;
+
+        var web3 = await CreateSignedWeb3Async();
+        var balance = await arcNanopayment.GatewayAvailableBalanceAsync(
+            Erc20UsdcHelper.ArcUsdcAddress,
+            address);
+        return FromUsdc(balance);
+    }
+
+    public async Task<string> DepositAsync(decimal amountUSDC, bool nanopayment = false)
     {
         var web3 = await CreateSignedWeb3Async();
         var amount = Erc20UsdcHelper.ParseUsdc(amountUSDC);
+
+        if (nanopayment)
+        {
+            var arcNanopayment = GetComponent<ArcNanopaymentClient>();
+            var capUsdc = (decimal)arcNanopayment.maxNanopaymentUsdc;
+            var nanopaymentCap = Erc20UsdcHelper.ParseUsdc(capUsdc);
+
+            // Use the reconciled balance so unsettled outflows we've already authorized
+            // don't trick us into skipping a needed top-up.
+            var effectiveAvailableUsdc = await GetGatewayAvailableBalanceUSDCAsync();
+            if (effectiveAvailableUsdc < capUsdc)
+                await arcNanopayment.ApproveIfNeededThenGatewayDepositAsync(0.5m);
+
+            var content = await arcNanopayment.FetchPaywalledResourceAsync(
+                arcNanopayment.x402ServerUrl,
+                PrivateKey,
+                nanopaymentCap);
+            RecordX402Outflow(arcNanopayment.LastPaidAmountSmallestUnits);
+            return content;
+        }
 
         // GamePayment.deposit pulls USDC via safeTransferFrom, so it needs allowance first.
         await Erc20UsdcHelper.EnsureApprovalAsync(web3, contractAddress, amount);
@@ -87,9 +159,10 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<string> WithdrawAsync(decimal amountUSDC)
     {
         var web3 = await CreateSignedWeb3Async();
+        var amount = Erc20UsdcHelper.ParseUsdc(amountUSDC);
+
         var contract = web3.Eth.GetContract(Abi, contractAddress);
         var withdraw = contract.GetFunction("withdraw");
-        var amount = Erc20UsdcHelper.ParseUsdc(amountUSDC);
         var gas = new HexBigInteger(150000);
 
         return await withdraw.SendTransactionAsync(

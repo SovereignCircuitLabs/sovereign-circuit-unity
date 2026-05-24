@@ -46,8 +46,16 @@ namespace ArcTrading.Nanopayment
         
         private const int authorizationTtlSeconds = 604900;
 
-        [Header("Configuration")] 
-        [SerializeField] private string x402ServerUrl = "http://localhost:4021/risk-profile";
+        [Header("Configuration")]
+        public string x402ServerUrl = "http://localhost:4021/risk-profile";
+        // Upper bound for any single x402 payment, in USDC. The server quotes the actual price
+        // via the 402 PAYMENT-REQUIRED header; we refuse to sign if it exceeds this cap.
+        public float maxNanopaymentUsdc = 0.5f;
+
+        // Smallest-unit amount signed for in the most recent successful x402 call.
+        // Callers can read this immediately after awaiting FetchPaywalledResourceAsync to know the exact
+        // amount that will be settled out of the gateway wallet (batch settlement lags chain reads).
+        public BigInteger LastPaidAmountSmallestUnits { get; private set; }
         [SerializeField] private long fallbackChainId = 5042002;
         [SerializeField] private int httpTimeoutSeconds = 20;
         [SerializeField] private bool verboseLogging = false;
@@ -186,6 +194,7 @@ namespace ArcTrading.Nanopayment
             }
 
             var value = required;
+            LastPaidAmountSmallestUnits = value;
 
             var chainId = spec.Value<long?>("chainId")
                           ?? extra.Value<long?>("chainId")

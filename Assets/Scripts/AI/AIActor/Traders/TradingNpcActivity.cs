@@ -10,6 +10,7 @@ public enum TradingNpcActivityType
     Rebalance,
     TradeHold,
     TradeDeposit,
+    TradeDepositNanopayment,
     TradeWithdraw,
     WorldEventConfigChanged,
     ChainActionFailed

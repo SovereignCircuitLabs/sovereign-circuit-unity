@@ -82,6 +82,9 @@ public class NpcPortfolioState
     /// <summary>NPC 已存入 Vault 的 USDC 余额，代表资金正在参与 Vault 策略、投资以及收益逻辑，且不在钱包内，只能通过 withdraw 取出</summary>
     public float vaultUSDC;
 
+    /// <summary>NPC 在 Circle Gateway Wallet 中可用的 USDC 余额，用于 x402 nanopayment 即时结算</summary>
+    public float gatewayUSDC;
+
     /// <summary>预留给生活需求的 USDC 预算，低于阈值时 NPC 会优先从钱包补充</summary>
     public float livingBudgetUSDC;
 
@@ -93,7 +96,7 @@ public class NpcPortfolioState
 
     public float TotalUSDC
     {
-        get { return walletUSDC + vaultUSDC; }
+        get { return walletUSDC + vaultUSDC + gatewayUSDC; }
     }
 }
 
