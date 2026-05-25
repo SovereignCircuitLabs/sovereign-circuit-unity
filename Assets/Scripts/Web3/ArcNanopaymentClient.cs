@@ -77,6 +77,22 @@ namespace ArcTrading.Nanopayment
             Debug.Log($"Fetched content: {content}");
         }
         
+        public async Task<string> FetchPaywalledResourceAsync(
+            string url,
+            BigInteger tokenId,
+            NpcPaymentWalletService walletService,
+            BigInteger maxPaymentAmount)
+        {
+            if (walletService == null) throw new ArgumentNullException(nameof(walletService));
+            
+            var signer = await walletService.VerifySignerForSigningAsync(tokenId);
+
+            if (verboseLogging)
+                Debug.Log($"[ArcNanopayment] verified signer for NPC {tokenId}: addr={signer.Address}, version={signer.Version}");
+
+            return await FetchPaywalledResourceAsync(url, signer.PrivateKey, maxPaymentAmount);
+        }
+
         public async Task<string> FetchPaywalledResourceAsync(string url, string npcPrivateKey, BigInteger maxPaymentAmount)
         {
             if (string.IsNullOrWhiteSpace(url))

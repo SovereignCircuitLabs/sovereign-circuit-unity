@@ -417,6 +417,30 @@ public abstract class TradingNpcActor : AIActor
             $"wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, address={contractClient.WalletAddress}");
 
         Debug.Log($"{LogPrefix} initialized USDC portfolio for {contractClient.WalletAddress}: wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, living={portfolioState.livingBudgetUSDC:0.####}, reserve={portfolioState.reserveBudgetUSDC:0.####}, trading={portfolioState.tradingBudgetUSDC:0.####}");
+
+        // generate or load x402 signature payment wallet and bind it to NPC(NFT)
+        try
+        {
+            var signer = await contractClient.EnsurePaymentWalletBoundAsync();
+            if (signer.HasValue)
+            {
+                AddActivity(
+                    TradingNpcActivityType.Initialized,
+                    "Payment wallet bound",
+                    $"tokenId={signer.Value.TokenId}, paymentWallet={signer.Value.Address}, version={signer.Value.Version}");
+                Debug.Log($"{LogPrefix} payment wallet bound: tokenId={signer.Value.TokenId}, addr={signer.Value.Address}, version={signer.Value.Version}");
+            }
+        }
+        catch (NpcSignerNotOwned ex)
+        {
+            Debug.LogWarning($"{LogPrefix} {ex.Message}");
+            AddActivity(TradingNpcActivityType.ChainActionFailed, "Payment wallet not owned by this device", ex.Message);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"{LogPrefix} failed to bind payment wallet: {ex}");
+            AddActivity(TradingNpcActivityType.ChainActionFailed, "Bind payment wallet failed", ex.Message);
+        }
     }
 
     private async Task RefreshBalancesAsync()
