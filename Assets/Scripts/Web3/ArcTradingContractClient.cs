@@ -15,6 +15,13 @@ public class ArcTradingContractClient : MonoBehaviour
     public string ContractAddress => contractAddress;
     [SerializeField] private string privateKey;
     public string PrivateKey => privateKey;
+    
+    [Header("NPC NFT Identity")]
+    [SerializeField] private ulong nftTokenId;
+    [SerializeField] private NpcPaymentWalletService npcPaymentWalletService;
+
+    public BigInteger NftTokenId => new BigInteger(nftTokenId);
+    public NpcPaymentWalletService NpcPaymentWalletService => npcPaymentWalletService;
 
     private const string Abi = @"[
       {""inputs"":[{""internalType"":""address"",""name"":""_usdc"",""type"":""address""}],""stateMutability"":""nonpayable"",""type"":""constructor""},
@@ -30,10 +37,7 @@ public class ArcTradingContractClient : MonoBehaviour
     ]";
 
     private Web3 readOnlyWeb3;
-
-    // Gateway batch-settlement reconciliation. The on-chain availableBalance lags any x402
-    // authorizations we've already signed, so we track unsettled outflows locally and subtract
-    // them when reporting the gateway balance to the UI.
+    
     private decimal lastKnownOnchainGatewayUsdc;
     private decimal pendingX402OutflowUsdc;
     private bool gatewayBaselineInitialized;
@@ -49,6 +53,13 @@ public class ArcTradingContractClient : MonoBehaviour
     {
         var web3 = await CreateSignedWeb3Async();
         WalletAddress = web3.TransactionManager.Account.Address;
+    }
+    
+    public async Task<NpcPaymentSigner?> EnsurePaymentWalletBoundAsync()
+    {
+        if (npcPaymentWalletService == null || nftTokenId == 0) return null;
+        var signer = await npcPaymentWalletService.EnsureBoundAsync(NftTokenId);
+        return signer;
     }
 
     public async Task<decimal> GetWalletBalanceUSDCAsync()
@@ -127,19 +138,29 @@ public class ArcTradingContractClient : MonoBehaviour
 
         if (nanopayment)
         {
+            if (npcPaymentWalletService == null)
+                throw new InvalidOperationException(
+                    $"{name}: npcPaymentWalletService is not wired — nanopayment path cannot resolve the NPC operator key.");
+            if (nftTokenId == 0)
+                throw new InvalidOperationException(
+                    $"{name}: nftTokenId is 0 — set it to the deployed NPC NFT tokenId before enabling nanopayment.");
+
             var arcNanopayment = GetComponent<ArcNanopaymentClient>();
             var capUsdc = (decimal)arcNanopayment.maxNanopaymentUsdc;
             var nanopaymentCap = Erc20UsdcHelper.ParseUsdc(capUsdc);
 
             // Use the reconciled balance so unsettled outflows we've already authorized
-            // don't trick us into skipping a needed top-up.
+            // don't trick us into skipping a needed top-up. The gateway is funded from
+            // the NFT-owner key (`privateKey`); the x402 signature itself is produced
+            // by the per-NPC operator key resolved inside FetchPaywalledResourceAsync.
             var effectiveAvailableUsdc = await GetGatewayAvailableBalanceUSDCAsync();
             if (effectiveAvailableUsdc < capUsdc)
                 await arcNanopayment.ApproveIfNeededThenGatewayDepositAsync(0.5m);
 
             var content = await arcNanopayment.FetchPaywalledResourceAsync(
                 arcNanopayment.x402ServerUrl,
-                PrivateKey,
+                NftTokenId,
+                npcPaymentWalletService,
                 nanopaymentCap);
             RecordX402Outflow(arcNanopayment.LastPaidAmountSmallestUnits);
             return content;
