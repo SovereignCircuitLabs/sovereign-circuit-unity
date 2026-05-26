@@ -117,6 +117,21 @@ public class NpcPaymentWalletService : MonoBehaviour
         return await GenerateAndBindAsync(tokenId, contractAddr, chainId);
     }
 
+    public async Task<NpcPaymentSigner> EnsureBoundOrRebindAsync(BigInteger tokenId)
+    {
+        try
+        {
+            return await EnsureBoundAsync(tokenId);
+        }
+        catch (NpcSignerNotOwned ex)
+        {
+            Debug.LogWarning($"[NpcPaymentWalletService] tokenId={tokenId} stale binding "
+                             + $"({ex.ChainWallet}) — auto-rebinding from this device. "
+                             + "Any funds at the old operator address are abandoned.");
+            return await ForceRebindAsync(tokenId);
+        }
+    }
+
     public async Task<NpcPaymentSigner> ForceRebindAsync(BigInteger tokenId)
     {
         var chainId = await npcContract.GetChainIdAsync();

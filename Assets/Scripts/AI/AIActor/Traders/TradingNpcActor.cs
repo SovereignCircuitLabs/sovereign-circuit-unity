@@ -407,16 +407,6 @@ public abstract class TradingNpcActor : AIActor
     private async Task InitializePortfolioAsync()
     {
         await contractClient.InitializeWalletAsync();
-        await RefreshBalancesAsync();
-        AllocateBudgetsFromBalances();
-        lastRebalanceTime = Time.time;
-        currentActivity = "Initialized";
-        AddActivity(
-            TradingNpcActivityType.Initialized,
-            "Portfolio initialized",
-            $"wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, address={contractClient.WalletAddress}");
-
-        Debug.Log($"{LogPrefix} initialized USDC portfolio for {contractClient.WalletAddress}: wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, living={portfolioState.livingBudgetUSDC:0.####}, reserve={portfolioState.reserveBudgetUSDC:0.####}, trading={portfolioState.tradingBudgetUSDC:0.####}");
 
         // generate or load x402 signature payment wallet and bind it to the NPC(NFT)
         try
@@ -430,8 +420,21 @@ public abstract class TradingNpcActor : AIActor
                     $"tokenId={signer.Value.TokenId}, paymentWallet={signer.Value.Address}, version={signer.Value.Version}");
                 Debug.Log($"{LogPrefix} payment wallet bound: tokenId={signer.Value.TokenId}, addr={signer.Value.Address}, version={signer.Value.Version}");
             }
-            
             await contractClient.EnsureNpcHasInitialCapitalAsync();
+            await RefreshBalancesAsync();
+            AllocateBudgetsFromBalances();
+            lastRebalanceTime = Time.time;
+            currentActivity = "Initialized";
+            AddActivity(
+                TradingNpcActivityType.Initialized,
+                "Portfolio initialized",
+                $"wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, address={contractClient.WalletAddress}");
+
+            Debug.Log($"{LogPrefix} initialized USDC portfolio for {contractClient.WalletAddress}: " +
+                      $"wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, " +
+                      $"living={portfolioState.livingBudgetUSDC:0.####}, " +
+                      $"reserve={portfolioState.reserveBudgetUSDC:0.####}, " +
+                      $"trading={portfolioState.tradingBudgetUSDC:0.####}");
         }
         catch (NpcSignerNotOwned ex)
         {

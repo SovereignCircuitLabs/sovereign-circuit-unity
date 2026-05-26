@@ -69,7 +69,7 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<NpcPaymentSigner?> EnsurePaymentWalletBoundAsync()
     {
         if (npcPaymentWalletService == null || nftTokenId == 0) return null;
-        var signer = await npcPaymentWalletService.EnsureBoundAsync(NftTokenId);
+        var signer = await npcPaymentWalletService.EnsureBoundOrRebindAsync(NftTokenId);
         if (useBoundWalletAsTrader) CacheBoundSigner(signer);
         return signer;
     }
@@ -277,7 +277,7 @@ public class ArcTradingContractClient : MonoBehaviour
             if (!string.IsNullOrEmpty(cachedTraderPrivateKey))
                 return cachedTraderPrivateKey;
 
-            var signer = await npcPaymentWalletService.EnsureBoundAsync(NftTokenId);
+            var signer = await npcPaymentWalletService.EnsureBoundOrRebindAsync(NftTokenId);
             CacheBoundSigner(signer);
             return cachedTraderPrivateKey;
         }

@@ -758,6 +758,7 @@ MonoBehaviour:
   rpcUrl: https://rpc.testnet.arc.network
   contractAddress: 0x3eCc01Be94D34f76aab3C1d5Ba23001d577Cd996
   privateKey: 
+  initialUsdcCapital: 5
   nftTokenId: 2
   npcPaymentWalletService: {fileID: 0}
   useBoundWalletAsTrader: 1
