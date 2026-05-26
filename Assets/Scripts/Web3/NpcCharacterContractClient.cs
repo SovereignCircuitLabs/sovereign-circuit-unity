@@ -1,5 +1,6 @@
 using System;
 using System.Numerics;
+using System.Threading;
 using System.Threading.Tasks;
 using Nethereum.ABI.FunctionEncoding.Attributes;
 using Nethereum.Contracts;
@@ -20,13 +21,13 @@ public class NpcCharacterContractClient : MonoBehaviour
     [SerializeField] private string rpcUrl = "https://rpc.testnet.arc.network";
 
     // Address of the deployed NpcCharacter NFT contract
-    [SerializeField] private string contractAddress;
+    [SerializeField] private string nftContractAddress;
 
     // Private key of the EOA that currently owns the NPC NFTs we manage from this client.
     // NOT used for x402 signing!
     [SerializeField] private string nftOwnerPrivateKey;
 
-    public string ContractAddress => contractAddress;
+    public string NftContractAddress => nftContractAddress;
     public string RpcUrl => rpcUrl;
     
     private const string Abi = @"[
@@ -55,7 +56,11 @@ public class NpcCharacterContractClient : MonoBehaviour
     ]";
 
     private Web3 readOnlyWeb3;
-    
+
+    // Serializes owner-signed tx submission so concurrent bind/clear calls from
+    // multiple NPCs sharing this single client do not race on eth_getTransactionCount.
+    private static readonly SemaphoreSlim ownerTxGate = new SemaphoreSlim(1, 1);
+
     public long? CachedChainId { get; private set; }
 
     private void Awake()
@@ -73,7 +78,7 @@ public class NpcCharacterContractClient : MonoBehaviour
     
     public async Task<(string wallet, ulong version)> GetPaymentBindingAsync(BigInteger tokenId)
     {
-        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
         var fn = contract.GetFunction("getPaymentBinding");
         var dto = await fn.CallDeserializingToObjectAsync<PaymentBindingDTO>(tokenId);
         return (dto.Wallet, dto.Version);
@@ -81,38 +86,75 @@ public class NpcCharacterContractClient : MonoBehaviour
 
     public async Task<string> OwnerOfAsync(BigInteger tokenId)
     {
-        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
         return await contract.GetFunction("ownerOf").CallAsync<string>(tokenId);
     }
 
     public async Task<bool> ExistsAsync(BigInteger tokenId)
     {
-        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
         return await contract.GetFunction("exists").CallAsync<bool>(tokenId);
     }
     
     public async Task<string> BindPaymentWalletAsync(BigInteger tokenId, string walletAddress)
     {
-        var web3 = await CreateSignedWeb3Async();
-        var contract = web3.Eth.GetContract(Abi, contractAddress);
-        var bind = contract.GetFunction("bindPaymentWallet");
-        var gas = new HexBigInteger(120000);
-        var txHash = await bind.SendTransactionAsync(
-            web3.TransactionManager.Account.Address, gas, null, tokenId, walletAddress);
-        await WaitReceiptAsync(web3, txHash);
-        return txHash;
+        await ownerTxGate.WaitAsync();
+        try
+        {
+            var web3 = await CreateSignedWeb3Async();
+            var contract = web3.Eth.GetContract(Abi, nftContractAddress);
+            var bind = contract.GetFunction("bindPaymentWallet");
+            var gas = new HexBigInteger(120000);
+            var txHash = await bind.SendTransactionAsync(
+                web3.TransactionManager.Account.Address, gas, null, tokenId, walletAddress);
+            await WaitReceiptAsync(web3, txHash);
+            return txHash;
+        }
+        finally
+        {
+            ownerTxGate.Release();
+        }
     }
-    
+
     public async Task<string> ClearPaymentWalletAsync(BigInteger tokenId)
     {
-        var web3 = await CreateSignedWeb3Async();
-        var contract = web3.Eth.GetContract(Abi, contractAddress);
-        var clearFn = contract.GetFunction("clearPaymentWallet");
-        var gas = new HexBigInteger(80000);
-        var txHash = await clearFn.SendTransactionAsync(
-            web3.TransactionManager.Account.Address, gas, null, tokenId);
-        await WaitReceiptAsync(web3, txHash);
-        return txHash;
+        await ownerTxGate.WaitAsync();
+        try
+        {
+            var web3 = await CreateSignedWeb3Async();
+            var contract = web3.Eth.GetContract(Abi, nftContractAddress);
+            var clearFn = contract.GetFunction("clearPaymentWallet");
+            var gas = new HexBigInteger(80000);
+            var txHash = await clearFn.SendTransactionAsync(
+                web3.TransactionManager.Account.Address, gas, null, tokenId);
+            await WaitReceiptAsync(web3, txHash);
+            return txHash;
+        }
+        finally
+        {
+            ownerTxGate.Release();
+        }
+    }
+    
+    public async Task<string> TransferUsdcFromOwnerAsync(string toAddress, BigInteger amount)
+    {
+        if (string.IsNullOrWhiteSpace(toAddress))
+            throw new ArgumentException("toAddress is required", nameof(toAddress));
+        if (amount <= BigInteger.Zero)
+            throw new ArgumentException("amount must be positive", nameof(amount));
+
+        await ownerTxGate.WaitAsync();
+        try
+        {
+            var web3 = await CreateSignedWeb3Async();
+            var txHash = await Erc20UsdcHelper.TransferAsync(web3, toAddress, amount);
+            await WaitReceiptAsync(web3, txHash);
+            return txHash;
+        }
+        finally
+        {
+            ownerTxGate.Release();
+        }
     }
     
     private static async Task WaitReceiptAsync(Web3 web3, string txHash)

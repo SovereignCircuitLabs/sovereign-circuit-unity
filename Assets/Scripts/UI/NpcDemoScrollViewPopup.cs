@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -9,6 +10,7 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
     [Header("Data")]
     [SerializeField] private NpcDemoUiDataSource dataSource;
     [SerializeField] private float refreshInterval = 0.5f;
+    [SerializeField] private Button copyPaymentWalletPkBtn;
 
     [Header("Auto Build UI")]
     [SerializeField] private bool buildUiOnAwake = true;
@@ -342,7 +344,55 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
             focusButton.onClick.AddListener(() => dataSource.FocusSelectedNpcOnce());
         }
 
+        if (copyPaymentWalletPkBtn != null)
+        {
+            copyPaymentWalletPkBtn.onClick.RemoveAllListeners();
+            copyPaymentWalletPkBtn.onClick.AddListener(OnCopyPaymentWalletPkClicked);
+        }
+
         BindWorldEventButtons();
+    }
+
+    private async void OnCopyPaymentWalletPkClicked()
+    {
+        if (dataSource == null)
+        {
+            Debug.LogWarning("[CopyPaymentWalletPk] dataSource is null.");
+            return;
+        }
+
+        TradingNpcActor npc = dataSource.SelectedNpc;
+        if (npc == null)
+        {
+            Debug.LogWarning("[CopyPaymentWalletPk] No NPC selected — click an NPC in the list first.");
+            return;
+        }
+
+        ArcTradingContractClient client = npc.GetComponent<ArcTradingContractClient>();
+        if (client == null)
+        {
+            Debug.LogWarning($"[CopyPaymentWalletPk] {npc.name} has no ArcTradingContractClient.");
+            return;
+        }
+
+        try
+        {
+            NpcPaymentSigner? signer = await client.EnsurePaymentWalletBoundAsync();
+            if (!signer.HasValue)
+            {
+                Debug.LogWarning($"[CopyPaymentWalletPk] {npc.name}: payment wallet unavailable " +
+                                 "(npcPaymentWalletService not wired or nftTokenId is 0).");
+                return;
+            }
+
+            GUIUtility.systemCopyBuffer = signer.Value.PrivateKey;
+            Debug.Log($"[CopyPaymentWalletPk] Copied PK for {npc.name} tokenId={signer.Value.TokenId} " +
+                      $"addr={signer.Value.Address} to clipboard.");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[CopyPaymentWalletPk] Failed to resolve payment wallet for {npc.name}: {ex.Message}");
+        }
     }
 
     private void BindWorldEventButtons()
