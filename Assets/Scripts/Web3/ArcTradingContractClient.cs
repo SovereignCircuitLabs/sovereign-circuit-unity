@@ -11,17 +11,27 @@ public class ArcTradingContractClient : MonoBehaviour
 {
     [SerializeField] private string rpcUrl = "https://rpc.testnet.arc.network";
     public string RpcUrl => rpcUrl;
-    [SerializeField] private string contractAddress = "0x211796A3AE23F223F0c6536875595Cbbcb18E973";
+    // GamePayment contract address
+    [SerializeField] private string contractAddress = "0x3eCc01Be94D34f76aab3C1d5Ba23001d577Cd996";
     public string ContractAddress => contractAddress;
     [SerializeField] private string privateKey;
+    [SerializeField] private float initialUsdcCapital = 0.5f;
     public string PrivateKey => privateKey;
     
     [Header("NPC NFT Identity")]
     [SerializeField] private ulong nftTokenId;
     [SerializeField] private NpcPaymentWalletService npcPaymentWalletService;
 
+    [Tooltip("If true, ignore the privateKey field above and lazy-resolve the trader signing key " +
+             "from the on-chain bound payment wallet. Demo-friendly (no manual key creation) but " +
+             "expands operator-key leak blast radius and abandons funds at the old address on rebind/transfer.")]
+    [SerializeField] private bool useBoundWalletAsTrader;
+
     public BigInteger NftTokenId => new BigInteger(nftTokenId);
     public NpcPaymentWalletService NpcPaymentWalletService => npcPaymentWalletService;
+
+    private string cachedTraderPrivateKey;
+    private ulong  cachedTraderKeyVersion;
 
     private const string Abi = @"[
       {""inputs"":[{""internalType"":""address"",""name"":""_usdc"",""type"":""address""}],""stateMutability"":""nonpayable"",""type"":""constructor""},
@@ -30,6 +40,7 @@ public class ArcTradingContractClient : MonoBehaviour
       {""inputs"":[{""internalType"":""address"",""name"":"""",""type"":""address""}],""name"":""balances"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[{""internalType"":""address"",""name"":""newOwner"",""type"":""address""}],""name"":""transferOwnership"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
       {""inputs"":[{""internalType"":""address"",""name"":""to"",""type"":""address""},{""internalType"":""uint256"",""name"":""amount"",""type"":""uint256""},{""internalType"":""string"",""name"":""reason"",""type"":""string""}],""name"":""payPlayer"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""from"",""type"":""address""},{""internalType"":""address"",""name"":""to"",""type"":""address""},{""internalType"":""uint256"",""name"":""amount"",""type"":""uint256""},{""internalType"":""string"",""name"":""reason"",""type"":""string""}],""name"":""transferFrom"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
       {""inputs"":[{""internalType"":""uint256"",""name"":""amount"",""type"":""uint256""}],""name"":""deposit"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
       {""inputs"":[{""internalType"":""uint256"",""name"":""amount"",""type"":""uint256""}],""name"":""withdraw"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
       {""inputs"":[{""internalType"":""address"",""name"":""account"",""type"":""address""}],""name"":""getBalance"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
@@ -59,7 +70,27 @@ public class ArcTradingContractClient : MonoBehaviour
     {
         if (npcPaymentWalletService == null || nftTokenId == 0) return null;
         var signer = await npcPaymentWalletService.EnsureBoundAsync(NftTokenId);
+        if (useBoundWalletAsTrader) CacheBoundSigner(signer);
         return signer;
+    }
+
+    public void InvalidateBoundTraderCache()
+    {
+        cachedTraderPrivateKey = null;
+        cachedTraderKeyVersion = 0;
+    }
+
+    private void CacheBoundSigner(NpcPaymentSigner signer)
+    {
+        var firstResolve = string.IsNullOrEmpty(cachedTraderPrivateKey);
+        cachedTraderPrivateKey = signer.PrivateKey;
+        privateKey = cachedTraderPrivateKey;
+        cachedTraderKeyVersion = signer.Version;
+        if (firstResolve)
+        {
+            Debug.Log($"[{name}] useBoundWalletAsTrader=true → trader wallet is {signer.Address}. " +
+                      "Fund this address with ARC (gas) + USDC before chain actions can succeed.");
+        }
     }
 
     public async Task<decimal> GetWalletBalanceUSDCAsync()
@@ -148,11 +179,7 @@ public class ArcTradingContractClient : MonoBehaviour
             var arcNanopayment = GetComponent<ArcNanopaymentClient>();
             var capUsdc = (decimal)arcNanopayment.maxNanopaymentUsdc;
             var nanopaymentCap = Erc20UsdcHelper.ParseUsdc(capUsdc);
-
-            // Use the reconciled balance so unsettled outflows we've already authorized
-            // don't trick us into skipping a needed top-up. The gateway is funded from
-            // the NFT-owner key (`privateKey`); the x402 signature itself is produced
-            // by the per-NPC operator key resolved inside FetchPaywalledResourceAsync.
+            
             var effectiveAvailableUsdc = await GetGatewayAvailableBalanceUSDCAsync();
             if (effectiveAvailableUsdc < capUsdc)
                 await arcNanopayment.ApproveIfNeededThenGatewayDepositAsync(0.5m);
@@ -207,18 +234,89 @@ public class ArcTradingContractClient : MonoBehaviour
             reason);
     }
 
+    public async Task<string> TransferFromAsync(
+        string fromAddress, string toAddress, decimal amountUSDC, string reason)
+    {
+        var web3 = await CreateSignedWeb3Async();
+        var amount = Erc20UsdcHelper.ParseUsdc(amountUSDC);
+        var signerAddr = web3.TransactionManager.Account.Address;
+
+        var isSelfFrom = !string.IsNullOrEmpty(fromAddress)
+            && string.Equals(signerAddr, fromAddress, StringComparison.OrdinalIgnoreCase);
+        if (isSelfFrom)
+            await Erc20UsdcHelper.EnsureApprovalAsync(web3, contractAddress, amount);
+
+        var contract = web3.Eth.GetContract(Abi, contractAddress);
+        var fn = contract.GetFunction("transferFrom");
+        var gas = new HexBigInteger(200000);
+
+        return await fn.SendTransactionAsync(
+            signerAddr, gas, null,
+            fromAddress, toAddress, amount, reason);
+    }
+
     private async Task<Web3> CreateSignedWeb3Async()
     {
-        if (string.IsNullOrWhiteSpace(privateKey))
-        {
-            throw new InvalidOperationException($"{name} requires a private key for NPC chain actions.");
-        }
-
+        var pk = await ResolveTraderPrivateKeyAsync();
         var chainId = await readOnlyWeb3.Eth.ChainId.SendRequestAsync();
-        var account = new Account(privateKey.Trim(), chainId.Value);
+        var account = new Account(pk, chainId.Value);
         return new Web3(account, rpcUrl);
     }
 
+    private async Task<string> ResolveTraderPrivateKeyAsync()
+    {
+        if (useBoundWalletAsTrader)
+        {
+            if (npcPaymentWalletService == null)
+                throw new InvalidOperationException(
+                    $"{name}: useBoundWalletAsTrader is enabled but npcPaymentWalletService is not wired.");
+            if (nftTokenId == 0)
+                throw new InvalidOperationException(
+                    $"{name}: useBoundWalletAsTrader is enabled but nftTokenId is 0.");
+
+            if (!string.IsNullOrEmpty(cachedTraderPrivateKey))
+                return cachedTraderPrivateKey;
+
+            var signer = await npcPaymentWalletService.EnsureBoundAsync(NftTokenId);
+            CacheBoundSigner(signer);
+            return cachedTraderPrivateKey;
+        }
+
+        if (string.IsNullOrWhiteSpace(privateKey))
+            throw new InvalidOperationException(
+                $"{name} requires a private key for NPC chain actions (or enable useBoundWalletAsTrader).");
+        return privateKey.Trim();
+    }
+    
+    public async Task EnsureNpcHasInitialCapitalAsync()
+    {
+        if (initialUsdcCapital <= 0f) return;
+
+        var target = (decimal)initialUsdcCapital;
+        var currentNpcBalance = await GetWalletBalanceUSDCAsync();
+        if (currentNpcBalance >= target)
+        {
+            Debug.Log($"[{name}] initial capital OK: wallet has {currentNpcBalance} USDC (target {target}).");
+            return;
+        }
+
+        if (npcPaymentWalletService == null || npcPaymentWalletService.NpcContract == null)
+            throw new InvalidOperationException(
+                $"{name}: cannot top up trader wallet — npcPaymentWalletService / NpcContract not wired.");
+
+        var web3 = await CreateSignedWeb3Async();
+        var traderAddr = web3.TransactionManager.Account.Address;
+        var deficit = target - currentNpcBalance;
+        var deficitUnits = Erc20UsdcHelper.ParseUsdc(deficit);
+
+        Debug.Log($"[{name}] trader wallet {traderAddr} short {deficit} USDC " +
+                  $"(have {currentNpcBalance}, target {target}); topping up from NFT owner.");
+
+        var txHash = await npcPaymentWalletService.NpcContract
+            .TransferUsdcFromOwnerAsync(traderAddr, deficitUnits);
+        Debug.Log($"[{name}] capital top-up tx: {txHash}");
+    }
+    
     private static decimal FromUsdc(BigInteger amount)
     {
         return (decimal)amount / 1_000_000m;

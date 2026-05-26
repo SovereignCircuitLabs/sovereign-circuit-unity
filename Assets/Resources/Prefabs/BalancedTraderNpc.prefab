@@ -756,8 +756,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  contractAddress: 0x211796A3AE23F223F0c6536875595Cbbcb18E973
-  privateKey: 0x45088b4d9b9354204e4e10b94ca8b3a427ecd7525953c0132d9935c0562834d7
+  contractAddress: 0x3eCc01Be94D34f76aab3C1d5Ba23001d577Cd996
+  privateKey: 
+  nftTokenId: 2
+  npcPaymentWalletService: {fileID: 0}
+  useBoundWalletAsTrader: 1
 --- !u!114 &4129621925378898866
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -771,6 +774,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   x402ServerUrl: http://localhost:4021/risk-profile
+  maxNanopaymentUsdc: 0.5
   fallbackChainId: 5042002
   httpTimeoutSeconds: 20
   verboseLogging: 0

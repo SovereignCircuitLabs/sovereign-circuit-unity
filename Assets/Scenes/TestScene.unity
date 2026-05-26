@@ -571,6 +571,68 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a62dbb75346e4404956d4a5591453716, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!1 &947144899
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 947144900}
+  - component: {fileID: 947144901}
+  - component: {fileID: 947144902}
+  m_Layer: 0
+  m_Name: NpcChainService
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &947144900
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 947144899}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &947144901
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 947144899}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 354df9321361d224db11fd43302d700d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  rpcUrl: https://rpc.testnet.arc.network
+  nftContractAddress: 0x815eabCa2e00059974b33935A40C2874f7A5e47a
+  nftOwnerPrivateKey: 0xc5153c66596cdc5ab9918202eb84ba91e2a553d89782d30be4eb32cc7bf270f1
+--- !u!114 &947144902
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 947144899}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d2c33e8a30aa8bc4eaffef1ddb743720, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  npcContract: {fileID: 947144901}
+  vaultFileName: npc-payment-keys.json
 --- !u!1 &1377876660
 GameObject:
   m_ObjectHideFlags: 0
@@ -837,6 +899,11 @@ PrefabInstance:
       propertyPath: marketPoint
       value: 
       objectReference: {fileID: 568758300}
+    - target: {fileID: 9215966450908659434, guid: 6faf4089ee1458545827d38e8d18215a,
+        type: 3}
+      propertyPath: npcPaymentWalletService
+      value: 
+      objectReference: {fileID: 947144902}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -870,6 +937,11 @@ PrefabInstance:
       propertyPath: m_Name
       value: BalancedTraderNpc
       objectReference: {fileID: 0}
+    - target: {fileID: 7126216779124924540, guid: 3f8a23d8a11e6434eba9e8f17e13f418,
+        type: 3}
+      propertyPath: npcPaymentWalletService
+      value: 
+      objectReference: {fileID: 947144902}
     - target: {fileID: 7994277493181536465, guid: 3f8a23d8a11e6434eba9e8f17e13f418,
         type: 3}
       propertyPath: m_LocalPosition.x
@@ -1162,6 +1234,11 @@ PrefabInstance:
       propertyPath: marketPoint
       value: 
       objectReference: {fileID: 568758300}
+    - target: {fileID: 1726107866427964820, guid: d4c728759441f874d9ebc67fb684da01,
+        type: 3}
+      propertyPath: npcPaymentWalletService
+      value: 
+      objectReference: {fileID: 947144902}
     - target: {fileID: 3258902463958669678, guid: d4c728759441f874d9ebc67fb684da01,
         type: 3}
       propertyPath: m_Name
@@ -1300,6 +1377,7 @@ SceneRoots:
   - {fileID: 832575519}
   - {fileID: 1413901252115116992}
   - {fileID: 8854528776591125247}
+  - {fileID: 947144900}
   - {fileID: 1377876664}
   - {fileID: 8975593700637905684}
   - {fileID: 5861614161646567302}

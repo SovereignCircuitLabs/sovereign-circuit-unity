@@ -14,7 +14,6 @@ namespace ArcTrading.Nanopayment
 
         private ArcTradingContractClient tradingContractClient;
         private string rpcUrl = "https://rpc.testnet.arc.network";
-        private string privateKey;
 
         private Web3 gatewayReadOnlyWeb3;
 
@@ -35,7 +34,6 @@ namespace ArcTrading.Nanopayment
         {
             tradingContractClient = GetComponent<ArcTradingContractClient>();
             rpcUrl = tradingContractClient.RpcUrl;
-            privateKey = tradingContractClient.PrivateKey;
             gatewayReadOnlyWeb3 = new Web3(rpcUrl);
         }
 
@@ -159,13 +157,13 @@ namespace ArcTrading.Nanopayment
 
         private async Task<Web3> CreateSignedGatewayWeb3Async()
         {
-            if (string.IsNullOrWhiteSpace(privateKey))
+            if (string.IsNullOrWhiteSpace(tradingContractClient.PrivateKey))
             {
                 throw new InvalidOperationException($"{name} requires a private key for gateway wallet actions.");
             }
 
             var chainId = await gatewayReadOnlyWeb3.Eth.ChainId.SendRequestAsync();
-            var account = new Account(privateKey.Trim(), chainId.Value);
+            var account = new Account(tradingContractClient.PrivateKey.Trim(), chainId.Value);
             return new Web3(account, rpcUrl);
         }
     }

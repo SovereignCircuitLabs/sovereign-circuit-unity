@@ -16,7 +16,8 @@ public static class Erc20UsdcHelper
     private const string Erc20Abi = @"[
       {""constant"":true,""inputs"":[{""name"":""owner"",""type"":""address""}],""name"":""balanceOf"",""outputs"":[{""name"":"""",""type"":""uint256""}],""type"":""function""},
       {""constant"":true,""inputs"":[{""name"":""owner"",""type"":""address""},{""name"":""spender"",""type"":""address""}],""name"":""allowance"",""outputs"":[{""name"":"""",""type"":""uint256""}],""type"":""function""},
-      {""constant"":false,""inputs"":[{""name"":""spender"",""type"":""address""},{""name"":""amount"",""type"":""uint256""}],""name"":""approve"",""outputs"":[{""name"":"""",""type"":""bool""}],""type"":""function""}
+      {""constant"":false,""inputs"":[{""name"":""spender"",""type"":""address""},{""name"":""amount"",""type"":""uint256""}],""name"":""approve"",""outputs"":[{""name"":"""",""type"":""bool""}],""type"":""function""},
+      {""constant"":false,""inputs"":[{""name"":""to"",""type"":""address""},{""name"":""amount"",""type"":""uint256""}],""name"":""transfer"",""outputs"":[{""name"":"""",""type"":""bool""}],""type"":""function""}
     ]";
 
     public static async Task<BigInteger> GetBalanceAsync(Web3 web3, string owner)
@@ -40,6 +41,19 @@ public static class Erc20UsdcHelper
             new HexBigInteger(100000),
             null,
             spender,
+            amount);
+    }
+
+    public static async Task<string> TransferAsync(Web3 web3, string to, BigInteger amount)
+    {
+        var usdc = web3.Eth.GetContract(Erc20Abi, ArcUsdcAddress);
+        var transferFn = usdc.GetFunction("transfer");
+        var from = web3.TransactionManager.Account.Address;
+        return await transferFn.SendTransactionAsync(
+            from,
+            new HexBigInteger(120000),
+            null,
+            to,
             amount);
     }
 

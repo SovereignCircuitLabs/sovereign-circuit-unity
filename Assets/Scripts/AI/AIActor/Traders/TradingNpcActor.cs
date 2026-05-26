@@ -418,7 +418,7 @@ public abstract class TradingNpcActor : AIActor
 
         Debug.Log($"{LogPrefix} initialized USDC portfolio for {contractClient.WalletAddress}: wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, living={portfolioState.livingBudgetUSDC:0.####}, reserve={portfolioState.reserveBudgetUSDC:0.####}, trading={portfolioState.tradingBudgetUSDC:0.####}");
 
-        // generate or load x402 signature payment wallet and bind it to NPC(NFT)
+        // generate or load x402 signature payment wallet and bind it to the NPC(NFT)
         try
         {
             var signer = await contractClient.EnsurePaymentWalletBoundAsync();
@@ -430,6 +430,8 @@ public abstract class TradingNpcActor : AIActor
                     $"tokenId={signer.Value.TokenId}, paymentWallet={signer.Value.Address}, version={signer.Value.Version}");
                 Debug.Log($"{LogPrefix} payment wallet bound: tokenId={signer.Value.TokenId}, addr={signer.Value.Address}, version={signer.Value.Version}");
             }
+            
+            await contractClient.EnsureNpcHasInitialCapitalAsync();
         }
         catch (NpcSignerNotOwned ex)
         {

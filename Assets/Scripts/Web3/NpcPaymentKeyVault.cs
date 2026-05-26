@@ -6,29 +6,25 @@ using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
+using Org.BouncyCastle.Crypto.Engines;
+using Org.BouncyCastle.Crypto.Modes;
+using Org.BouncyCastle.Crypto.Parameters;
 using UnityEngine;
 
 [Serializable]
 internal class NpcPaymentVaultEntry
 {
-    // Lowercased contract address — vault is partitioned by (contractAddress, chainId)
-    // so two deployments of NpcCharacter on different chains never collide on tokenId.
     public string contractAddress;
-    public long   chainId;
-
-    // tokenId stored as decimal string so the file survives BigInteger > ulong.
+    public long chainId;
     public string tokenId;
 
-    // EIP-55 checksum address derived from the encrypted private key.
-    public string address;
-
-    // AES-GCM ciphertext (cipher || tag) and 12-byte nonce, both base64.
+    // AES-GCM ciphertext (cipher || tag) and 12-byte nonce, both base64
     public string encryptedPrivateKey;
     public string nonce;
+    
+    // EIP-55 checksum address derived from the encrypted private key
+    public string address;
 
-    // Snapshot of npcPaymentVersion[tokenId] at bind time. Used purely as a
-    // cache-invalidation tripwire — version mismatch means NFT has changed
-    // custody since we bound, and the local key MUST be forgotten.
     public ulong cachedVersion;
 }
 
@@ -39,18 +35,6 @@ internal class NpcPaymentVaultFile
     public List<NpcPaymentVaultEntry> entries = new List<NpcPaymentVaultEntry>();
 }
 
-/// <summary>
-/// Local encrypted store of NPC x402 operator keys, keyed by
-/// (contractAddress, chainId, tokenId).
-///
-/// Encryption strategy: AES-256-GCM with a key derived via PBKDF2 from
-/// SystemInfo.deviceUniqueIdentifier. This is "device-bound" — copying the
-/// vault file to another machine yields ciphertext that won't decrypt.
-/// It does NOT defeat a local attacker who can read the user's process
-/// memory or replay the device id; for that, layer a player-supplied
-/// passphrase on top. The current model is appropriate for low-value
-/// operator keys whose blast radius is capped by the gateway-wallet balance.
-/// </summary>
 public class NpcPaymentKeyVault
 {
     private readonly string filePath;
@@ -76,9 +60,6 @@ public class NpcPaymentKeyVault
         }
         catch (Exception ex)
         {
-            // Decryption failure here typically means the file was copied from
-            // another device, or the device id changed. Treat as missing so the
-            // service will route to rebind rather than crash.
             Debug.LogError($"[NpcPaymentKeyVault] decrypt failed for tokenId {tokenId}: {ex.Message}");
             return false;
         }
@@ -93,19 +74,18 @@ public class NpcPaymentKeyVault
     {
         var (cipher, nonce) = Encrypt(privateKey);
 
-        // Replace any prior entry for the same (contract, chainId, tokenId).
         var existing = Find(contractAddress, chainId, tokenId);
         if (existing != null) cache.entries.Remove(existing);
 
         cache.entries.Add(new NpcPaymentVaultEntry
         {
-            contractAddress     = contractAddress.ToLowerInvariant(),
-            chainId             = chainId,
-            tokenId             = tokenId.ToString(CultureInfo.InvariantCulture),
-            address             = address,
+            contractAddress = contractAddress.ToLowerInvariant(),
+            chainId = chainId,
+            tokenId = tokenId.ToString(CultureInfo.InvariantCulture),
+            address = address,
             encryptedPrivateKey = cipher,
-            nonce               = nonce,
-            cachedVersion       = cachedVersion
+            nonce = nonce,
+            cachedVersion = cachedVersion
         });
         Save();
     }
@@ -148,8 +128,6 @@ public class NpcPaymentKeyVault
         }
         catch (Exception ex)
         {
-            // Corrupt vault file: start empty rather than crash. The user can
-            // rebind from chain; nothing irrecoverable was stored here.
             Debug.LogError($"[NpcPaymentKeyVault] load failed, starting empty: {ex.Message}");
             return new NpcPaymentVaultFile();
         }
@@ -157,8 +135,6 @@ public class NpcPaymentKeyVault
 
     private void Save()
     {
-        // Atomic write via temp file + Replace so a crash mid-write can't
-        // leave a half-truncated vault on disk.
         var tmp = filePath + ".tmp";
         File.WriteAllText(tmp, JsonConvert.SerializeObject(cache, Formatting.Indented));
         if (File.Exists(filePath)) File.Replace(tmp, filePath, null);
@@ -167,20 +143,14 @@ public class NpcPaymentKeyVault
 
     // ---------- Crypto: AES-256-GCM, device-bound key ----------
 
-    private const int KeyBytes   = 32;
+    private const int KeyBytes = 32;
     private const int NonceBytes = 12;
-    private const int TagBytes   = 16;
+    private const int TagBytes = 16;
 
-    // Salt is constant per app — uniqueness comes from the device id.
-    // Bumping the suffix would force a vault rotation.
     private static readonly byte[] Salt = Encoding.UTF8.GetBytes("ArcTrading::NpcPaymentKeyVault::v1");
 
     private static byte[] DeriveKey()
     {
-        // SystemInfo.deviceUniqueIdentifier is stable per machine on Windows/
-        // standalone builds. If it ever returns empty (rare on some platforms)
-        // we fall back to a constant so the vault still works — at the cost
-        // of being machine-portable, which we explicitly document.
         var device = SystemInfo.deviceUniqueIdentifier;
         if (string.IsNullOrEmpty(device)) device = "ArcTrading::fallback-device-id";
 
@@ -188,6 +158,8 @@ public class NpcPaymentKeyVault
         return pbkdf2.GetBytes(KeyBytes);
     }
 
+    // BouncyCastle is used here instead of System.Security.Cryptography.AesGcm because
+    // AesGcm throws PlatformNotSupportedException on Unity's Mono runtime on Windows.
     private static (string cipherB64, string nonceB64) Encrypt(string plaintextHex)
     {
         var key = DeriveKey();
@@ -195,20 +167,14 @@ public class NpcPaymentKeyVault
         RandomNumberGenerator.Fill(nonce);
 
         var plaintext = Encoding.UTF8.GetBytes(plaintextHex);
-        var cipher = new byte[plaintext.Length];
-        var tag = new byte[TagBytes];
 
-        // .NET Standard 2.1's AesGcm has no explicit tag-size constructor —
-        // the tag length is inferred from the tag buffer size we pass below.
-        using (var aes = new AesGcm(key))
-        {
-            aes.Encrypt(nonce, plaintext, cipher, tag);
-        }
+        var gcm = new GcmBlockCipher(new AesEngine());
+        gcm.Init(true, new AeadParameters(new KeyParameter(key), TagBytes * 8, nonce));
 
-        // Store cipher || tag concatenated; nonce stored separately for clarity.
-        var combined = new byte[cipher.Length + tag.Length];
-        Buffer.BlockCopy(cipher, 0, combined, 0, cipher.Length);
-        Buffer.BlockCopy(tag, 0, combined, cipher.Length, tag.Length);
+        var combined = new byte[gcm.GetOutputSize(plaintext.Length)];
+        var written = gcm.ProcessBytes(plaintext, 0, plaintext.Length, combined, 0);
+        gcm.DoFinal(combined, written);
+
         return (Convert.ToBase64String(combined), Convert.ToBase64String(nonce));
     }
 
@@ -221,16 +187,13 @@ public class NpcPaymentKeyVault
         if (combined.Length < TagBytes)
             throw new CryptographicException("ciphertext too short");
 
-        var cipher = new byte[combined.Length - TagBytes];
-        var tag = new byte[TagBytes];
-        Buffer.BlockCopy(combined, 0, cipher, 0, cipher.Length);
-        Buffer.BlockCopy(combined, cipher.Length, tag, 0, TagBytes);
+        var gcm = new GcmBlockCipher(new AesEngine());
+        gcm.Init(false, new AeadParameters(new KeyParameter(key), TagBytes * 8, nonce));
 
-        var plaintext = new byte[cipher.Length];
-        using (var aes = new AesGcm(key))
-        {
-            aes.Decrypt(nonce, cipher, tag, plaintext);
-        }
-        return Encoding.UTF8.GetString(plaintext);
+        var plaintext = new byte[gcm.GetOutputSize(combined.Length)];
+        var written = gcm.ProcessBytes(combined, 0, combined.Length, plaintext, 0);
+        written += gcm.DoFinal(plaintext, written);
+
+        return Encoding.UTF8.GetString(plaintext, 0, written);
     }
 }
