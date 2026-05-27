@@ -40,6 +40,8 @@ namespace ArcTrading.Nanopayment
         private const string PaymentRequiredHeader = "PAYMENT-REQUIRED";
         private const string PaymentSignatureHeader = "PAYMENT-SIGNATURE";
         private const string PaymentResponseHeader = "PAYMENT-RESPONSE";
+        private const string NpcTbaHeader = "X-NPC-TBA";
+        private const string NpcTokenIdHeader = "X-NPC-TOKEN-ID";
         private const string DomainName = "GatewayWalletBatched";
         private const string DomainVersion = "1";
         private const string PrimaryType = "TransferWithAuthorization";
@@ -80,19 +82,25 @@ namespace ArcTrading.Nanopayment
             string url,
             BigInteger tokenId,
             NpcPaymentWalletService walletService,
-            BigInteger maxPaymentAmount)
+            BigInteger maxPaymentAmount,
+            string tbaAddress = null)
         {
             if (walletService == null) throw new ArgumentNullException(nameof(walletService));
-            
+
             var signer = await walletService.VerifySignerForSigningAsync(tokenId);
 
             if (verboseLogging)
                 Debug.Log($"[ArcNanopayment] verified signer for NPC {tokenId}: addr={signer.Address}, version={signer.Version}");
 
-            return await FetchPaywalledResourceAsync(url, signer.PrivateKey, maxPaymentAmount);
+            return await FetchPaywalledResourceAsync(url, signer.PrivateKey, maxPaymentAmount, tbaAddress, tokenId);
         }
 
-        public async Task<string> FetchPaywalledResourceAsync(string url, string npcPrivateKey, BigInteger maxPaymentAmount)
+        public async Task<string> FetchPaywalledResourceAsync(
+            string url,
+            string npcPrivateKey,
+            BigInteger maxPaymentAmount,
+            string tbaAddress = null,
+            BigInteger? tokenId = null)
         {
             if (string.IsNullOrWhiteSpace(url))
                 throw new ArgumentException("url is required", nameof(url));
@@ -132,11 +140,18 @@ namespace ArcTrading.Nanopayment
                 var signedJson = GenerateEip3009Signature(npcPrivateKey, requirements, maxPaymentAmount);
                 var paymentSignatureHeader = Convert.ToBase64String(Encoding.UTF8.GetBytes(signedJson));
 
-                // Step 4 — Reattach the PAYMENT-SIGNATURE header and retry the HTTP request
+                // Step 4 — Reattach the PAYMENT-SIGNATURE header and retry the HTTP request.
+                // X-NPC-TBA / X-NPC-TOKEN-ID let the server route the mint to the NPC's canonical
+                // ERC6551 TBA after on-chain validation, instead of dropping it on the operator
+                // wallet that signed the EIP-3009 authorization.
                 using (var retry = UnityWebRequest.Get(url))
                 {
                     retry.timeout = httpTimeoutSeconds;
                     retry.SetRequestHeader(PaymentSignatureHeader, paymentSignatureHeader);
+                    if (!string.IsNullOrWhiteSpace(tbaAddress))
+                        retry.SetRequestHeader(NpcTbaHeader, tbaAddress);
+                    if (tokenId.HasValue)
+                        retry.SetRequestHeader(NpcTokenIdHeader, tokenId.Value.ToString());
                     await SendAndAwait(retry);
 
                     if (retry.responseCode != 200)

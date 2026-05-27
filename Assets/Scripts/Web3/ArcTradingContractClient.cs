@@ -12,7 +12,7 @@ public class ArcTradingContractClient : MonoBehaviour
     [SerializeField] private string rpcUrl = "https://rpc.testnet.arc.network";
     public string RpcUrl => rpcUrl;
     // GamePayment contract address
-    [SerializeField] private string contractAddress = "0x3eCc01Be94D34f76aab3C1d5Ba23001d577Cd996";
+    [SerializeField] private string contractAddress = "0xAB1bF9314884E36688a2D9C9D2Da6fB36d041025";
     public string ContractAddress => contractAddress;
     [SerializeField] private string privateKey;
     [SerializeField] private float initialUsdcCapital = 0.5f;
@@ -21,6 +21,12 @@ public class ArcTradingContractClient : MonoBehaviour
     [Header("NPC NFT Identity")]
     [SerializeField] private ulong nftTokenId;
     [SerializeField] private NpcPaymentWalletService npcPaymentWalletService;
+
+    [Tooltip("ERC6551 token-bound account for this NPC NFT. The x402 server mints loot NFTs to this " +
+             "address (validating it on-chain), so the NPC's canonical TBA — not the operator wallet — " +
+             "holds the inventory.")]
+    [SerializeField] private string tbaAddress;
+    public string TbaAddress => tbaAddress;
 
     [Tooltip("If true, ignore the privateKey field above and lazy-resolve the trader signing key " +
              "from the on-chain bound payment wallet. Demo-friendly (no manual key creation) but " +
@@ -34,20 +40,50 @@ public class ArcTradingContractClient : MonoBehaviour
     private ulong  cachedTraderKeyVersion;
 
     private const string Abi = @"[
-      {""inputs"":[{""internalType"":""address"",""name"":""_usdc"",""type"":""address""}],""stateMutability"":""nonpayable"",""type"":""constructor""},
+      {""inputs"":[{""internalType"":""address"",""name"":""_usdc"",""type"":""address""},{""internalType"":""address"",""name"":""_items"",""type"":""address""}],""stateMutability"":""nonpayable"",""type"":""constructor""},
+      {""inputs"":[],""name"":""MINT_PRICE"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""NUM_TYPES"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""usdc"",""outputs"":[{""internalType"":""contract IERC20"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""items"",""outputs"":[{""internalType"":""address"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""owner"",""outputs"":[{""internalType"":""address"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
-      {""inputs"":[{""internalType"":""address"",""name"":"""",""type"":""address""}],""name"":""balances"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""gateway"",""outputs"":[{""internalType"":""contract IGatewayWallet"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""name"":""itemIds"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""name"":""circulatingSupply"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""activeTypeCount"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[{""internalType"":""address"",""name"":""newOwner"",""type"":""address""}],""name"":""transferOwnership"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
-      {""inputs"":[{""internalType"":""address"",""name"":""to"",""type"":""address""},{""internalType"":""uint256"",""name"":""amount"",""type"":""uint256""},{""internalType"":""string"",""name"":""reason"",""type"":""string""}],""name"":""payPlayer"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
-      {""inputs"":[{""internalType"":""address"",""name"":""from"",""type"":""address""},{""internalType"":""address"",""name"":""to"",""type"":""address""},{""internalType"":""uint256"",""name"":""amount"",""type"":""uint256""},{""internalType"":""string"",""name"":""reason"",""type"":""string""}],""name"":""transferFrom"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
-      {""inputs"":[{""internalType"":""uint256"",""name"":""amount"",""type"":""uint256""}],""name"":""deposit"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
-      {""inputs"":[{""internalType"":""uint256"",""name"":""amount"",""type"":""uint256""}],""name"":""withdraw"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
-      {""inputs"":[{""internalType"":""address"",""name"":""account"",""type"":""address""}],""name"":""getBalance"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
-      {""inputs"":[],""name"":""getContractBalance"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""}
+      {""inputs"":[],""name"":""mintRandom"",""outputs"":[{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""}],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""to"",""type"":""address""}],""name"":""mintRandomX402"",""outputs"":[{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""}],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""}],""name"":""sellItem"",""outputs"":[{""internalType"":""uint256"",""name"":""price"",""type"":""uint256""}],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""}],""name"":""getSellPrice"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""getContractBalance"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""_gateway"",""type"":""address""}],""name"":""setGateway"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""amount"",""type"":""uint256""}],""name"":""depositToGateway"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""amount"",""type"":""uint256""}],""name"":""initiateGatewayWithdrawal"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[],""name"":""completeGatewayWithdrawal"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""delegate"",""type"":""address""}],""name"":""addGatewayDelegate"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""delegate"",""type"":""address""}],""name"":""removeGatewayDelegate"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[],""name"":""gatewayAvailableBalance"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""gatewayWithdrawableBalance"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""gatewayWithdrawingBalance"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""gatewayTotalBalance"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""gatewayWithdrawalBlock"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""gatewayWithdrawalDelay"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""addr"",""type"":""address""}],""name"":""isGatewayAuthorized"",""outputs"":[{""internalType"":""bool"",""name"":"""",""type"":""bool""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""isGatewayTokenSupported"",""outputs"":[{""internalType"":""bool"",""name"":"""",""type"":""bool""}],""stateMutability"":""view"",""type"":""function""}
     ]";
 
+    // Minimal ERC1155 ABI — only what we need to read NPC's GameItems inventory.
+    private const string Erc1155Abi = @"[
+      {""inputs"":[{""internalType"":""address"",""name"":""account"",""type"":""address""},{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""}],""name"":""balanceOf"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""operator"",""type"":""address""},{""internalType"":""bool"",""name"":""approved"",""type"":""bool""}],""name"":""setApprovalForAll"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""account"",""type"":""address""},{""internalType"":""address"",""name"":""operator"",""type"":""address""}],""name"":""isApprovedForAll"",""outputs"":[{""internalType"":""bool"",""name"":"""",""type"":""bool""}],""stateMutability"":""view"",""type"":""function""}
+    ]";
+
+    private const int ItemTypeCount = 5;
+
     private Web3 readOnlyWeb3;
+    private string cachedItemsAddress;
+    private BigInteger[] cachedItemIds;
     
     private decimal lastKnownOnchainGatewayUsdc;
     private decimal pendingX402OutflowUsdc;
@@ -101,13 +137,119 @@ public class ArcTradingContractClient : MonoBehaviour
         return FromUsdc(balance);
     }
 
+    /// <summary>
+    /// Vault value = NPC's NFT inventory marked to the contract's buyback price,
+    /// i.e. Σ over the 5 managed item types of: balanceOf(npc, id) × getSellPrice(id).
+    /// </summary>
     public async Task<decimal> GetVaultBalanceUSDCAsync()
     {
         var web3 = await CreateSignedWeb3Async();
+        return await GetVaultBalanceUSDCAsync(web3.TransactionManager.Account.Address);
+    }
+
+    private async Task<decimal> GetVaultBalanceUSDCAsync(string account)
+    {
+        var itemIds = await GetItemIdsAsync();
+        var itemsAddr = await GetItemsAddressAsync();
+
+        var gamePayment = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var sellPriceFn = gamePayment.GetFunction("getSellPrice");
+
+        var items = readOnlyWeb3.Eth.GetContract(Erc1155Abi, itemsAddr);
+        var balanceOfFn = items.GetFunction("balanceOf");
+
+        BigInteger totalUnits = BigInteger.Zero;
+        for (int i = 0; i < itemIds.Length; i++)
+        {
+            var id = itemIds[i];
+            var balance = await balanceOfFn.CallAsync<BigInteger>(account, id);
+            if (balance == BigInteger.Zero) continue;
+            var price = await sellPriceFn.CallAsync<BigInteger>(id);
+            totalUnits += balance * price;
+        }
+        return FromUsdc(totalUnits);
+    }
+
+    // ---- Item / NFT queries ----
+
+    public async Task<string> GetItemsAddressAsync()
+    {
+        if (!string.IsNullOrEmpty(cachedItemsAddress)) return cachedItemsAddress;
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
-        var getBalance = contract.GetFunction("getBalance");
-        var balance = await getBalance.CallAsync<BigInteger>(web3.TransactionManager.Account.Address);
-        return FromUsdc(balance);
+        cachedItemsAddress = await contract.GetFunction("items").CallAsync<string>();
+        return cachedItemsAddress;
+    }
+
+    public async Task<BigInteger[]> GetItemIdsAsync()
+    {
+        if (cachedItemIds != null) return cachedItemIds;
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var fn = contract.GetFunction("itemIds");
+        var ids = new BigInteger[ItemTypeCount];
+        for (int i = 0; i < ItemTypeCount; i++)
+            ids[i] = await fn.CallAsync<BigInteger>(new BigInteger(i));
+        cachedItemIds = ids;
+        return cachedItemIds;
+    }
+
+    public async Task<decimal> GetSellPriceUSDCAsync(BigInteger itemId)
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var price = await contract.GetFunction("getSellPrice").CallAsync<BigInteger>(itemId);
+        return FromUsdc(price);
+    }
+
+    public async Task<decimal[]> GetAllSellPricesUSDCAsync()
+    {
+        var ids = await GetItemIdsAsync();
+        var prices = new decimal[ids.Length];
+        for (int i = 0; i < ids.Length; i++)
+            prices[i] = await GetSellPriceUSDCAsync(ids[i]);
+        return prices;
+    }
+
+    public async Task<BigInteger> GetCirculatingSupplyAsync(BigInteger itemId)
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        return await contract.GetFunction("circulatingSupply").CallAsync<BigInteger>(itemId);
+    }
+
+    public async Task<BigInteger> GetActiveTypeCountAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        return await contract.GetFunction("activeTypeCount").CallAsync<BigInteger>();
+    }
+
+    public async Task<decimal> GetMintPriceUSDCAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var price = await contract.GetFunction("MINT_PRICE").CallAsync<BigInteger>();
+        return FromUsdc(price);
+    }
+
+    public async Task<BigInteger> GetNftBalanceAsync(string account, BigInteger itemId)
+    {
+        var itemsAddr = await GetItemsAddressAsync();
+        var items = readOnlyWeb3.Eth.GetContract(Erc1155Abi, itemsAddr);
+        return await items.GetFunction("balanceOf").CallAsync<BigInteger>(account, itemId);
+    }
+
+    /// <summary>
+    /// Returns the first item id where balanceOf(npc, id) > 0, or null if NPC owns nothing.
+    /// Used by sellItem callers that don't care which type to sell.
+    /// </summary>
+    public async Task<BigInteger?> FindFirstOwnedItemIdAsync(string account)
+    {
+        var ids = await GetItemIdsAsync();
+        var itemsAddr = await GetItemsAddressAsync();
+        var items = readOnlyWeb3.Eth.GetContract(Erc1155Abi, itemsAddr);
+        var balanceOfFn = items.GetFunction("balanceOf");
+        for (int i = 0; i < ids.Length; i++)
+        {
+            var bal = await balanceOfFn.CallAsync<BigInteger>(account, ids[i]);
+            if (bal > BigInteger.Zero) return ids[i];
+        }
+        return null;
     }
 
     public async Task<decimal> GetContractTotalUsdcAsync()
@@ -116,6 +258,130 @@ public class ArcTradingContractClient : MonoBehaviour
         var fn = contract.GetFunction("getContractBalance");
         var balance = await fn.CallAsync<BigInteger>();
         return FromUsdc(balance);
+    }
+
+    // ----- GamePayment contract's own Circle Gateway state (owner-managed pool) -----
+
+    public async Task<string> GetConfiguredGatewayAddressAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        return await contract.GetFunction("gateway").CallAsync<string>();
+    }
+
+    public async Task<decimal> GetContractGatewayAvailableUSDCAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var balance = await contract.GetFunction("gatewayAvailableBalance").CallAsync<BigInteger>();
+        return FromUsdc(balance);
+    }
+
+    public async Task<decimal> GetContractGatewayWithdrawableUSDCAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var balance = await contract.GetFunction("gatewayWithdrawableBalance").CallAsync<BigInteger>();
+        return FromUsdc(balance);
+    }
+
+    public async Task<decimal> GetContractGatewayWithdrawingUSDCAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var balance = await contract.GetFunction("gatewayWithdrawingBalance").CallAsync<BigInteger>();
+        return FromUsdc(balance);
+    }
+
+    public async Task<decimal> GetContractGatewayTotalUSDCAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var balance = await contract.GetFunction("gatewayTotalBalance").CallAsync<BigInteger>();
+        return FromUsdc(balance);
+    }
+
+    public async Task<BigInteger> GetContractGatewayWithdrawalBlockAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        return await contract.GetFunction("gatewayWithdrawalBlock").CallAsync<BigInteger>();
+    }
+
+    public async Task<BigInteger> GetContractGatewayWithdrawalDelayAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        return await contract.GetFunction("gatewayWithdrawalDelay").CallAsync<BigInteger>();
+    }
+
+    public async Task<bool> IsGatewayAuthorizedAsync(string addr)
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        return await contract.GetFunction("isGatewayAuthorized").CallAsync<bool>(addr);
+    }
+
+    public async Task<bool> IsGatewayTokenSupportedAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        return await contract.GetFunction("isGatewayTokenSupported").CallAsync<bool>();
+    }
+
+    // ----- GamePayment contract's owner-only gateway admin -----
+
+    public async Task<string> SetGatewayAsync(string gatewayAddress)
+    {
+        var web3 = await CreateSignedWeb3Async();
+        var contract = web3.Eth.GetContract(Abi, contractAddress);
+        var fn = contract.GetFunction("setGateway");
+        var gas = new HexBigInteger(120000);
+        return await fn.SendTransactionAsync(
+            web3.TransactionManager.Account.Address, gas, null, gatewayAddress);
+    }
+
+    public async Task<string> DepositToGatewayAsync(decimal amountUSDC)
+    {
+        var web3 = await CreateSignedWeb3Async();
+        var amount = Erc20UsdcHelper.ParseUsdc(amountUSDC);
+        var contract = web3.Eth.GetContract(Abi, contractAddress);
+        var fn = contract.GetFunction("depositToGateway");
+        var gas = new HexBigInteger(250000);
+        return await fn.SendTransactionAsync(
+            web3.TransactionManager.Account.Address, gas, null, amount);
+    }
+
+    public async Task<string> InitiateGatewayWithdrawalAsync(decimal amountUSDC)
+    {
+        var web3 = await CreateSignedWeb3Async();
+        var amount = Erc20UsdcHelper.ParseUsdc(amountUSDC);
+        var contract = web3.Eth.GetContract(Abi, contractAddress);
+        var fn = contract.GetFunction("initiateGatewayWithdrawal");
+        var gas = new HexBigInteger(200000);
+        return await fn.SendTransactionAsync(
+            web3.TransactionManager.Account.Address, gas, null, amount);
+    }
+
+    public async Task<string> CompleteGatewayWithdrawalAsync()
+    {
+        var web3 = await CreateSignedWeb3Async();
+        var contract = web3.Eth.GetContract(Abi, contractAddress);
+        var fn = contract.GetFunction("completeGatewayWithdrawal");
+        var gas = new HexBigInteger(200000);
+        return await fn.SendTransactionAsync(
+            web3.TransactionManager.Account.Address, gas, null);
+    }
+
+    public async Task<string> AddGatewayDelegateAsync(string delegateAddress)
+    {
+        var web3 = await CreateSignedWeb3Async();
+        var contract = web3.Eth.GetContract(Abi, contractAddress);
+        var fn = contract.GetFunction("addGatewayDelegate");
+        var gas = new HexBigInteger(150000);
+        return await fn.SendTransactionAsync(
+            web3.TransactionManager.Account.Address, gas, null, delegateAddress);
+    }
+
+    public async Task<string> RemoveGatewayDelegateAsync(string delegateAddress)
+    {
+        var web3 = await CreateSignedWeb3Async();
+        var contract = web3.Eth.GetContract(Abi, contractAddress);
+        var fn = contract.GetFunction("removeGatewayDelegate");
+        var gas = new HexBigInteger(150000);
+        return await fn.SendTransactionAsync(
+            web3.TransactionManager.Account.Address, gas, null, delegateAddress);
     }
 
     public async Task<decimal> GetGatewayAvailableBalanceUSDCAsync()
@@ -161,12 +427,9 @@ public class ArcTradingContractClient : MonoBehaviour
             address);
         return FromUsdc(balance);
     }
-
-    public async Task<string> DepositAsync(decimal amountUSDC, bool nanopayment = false)
+    
+    public async Task<string> MintRandomAsync(bool nanopayment = false)
     {
-        var web3 = await CreateSignedWeb3Async();
-        var amount = Erc20UsdcHelper.ParseUsdc(amountUSDC);
-
         if (nanopayment)
         {
             if (npcPaymentWalletService == null)
@@ -184,75 +447,57 @@ public class ArcTradingContractClient : MonoBehaviour
             if (effectiveAvailableUsdc < capUsdc)
                 await arcNanopayment.ApproveIfNeededThenGatewayDepositAsync(0.5m);
 
+            if (string.IsNullOrWhiteSpace(tbaAddress))
+                throw new InvalidOperationException(
+                    $"{name}: tbaAddress is empty — set the NPC's ERC6551 TBA in the Inspector before running the nanopayment mint path; the server validates and refuses to mint without it.");
+
             var content = await arcNanopayment.FetchPaywalledResourceAsync(
                 arcNanopayment.x402ServerUrl,
                 NftTokenId,
                 npcPaymentWalletService,
-                nanopaymentCap);
+                nanopaymentCap,
+                tbaAddress);
             RecordX402Outflow(arcNanopayment.LastPaidAmountSmallestUnits);
             return content;
         }
 
-        // GamePayment.deposit pulls USDC via safeTransferFrom, so it needs allowance first.
-        await Erc20UsdcHelper.EnsureApprovalAsync(web3, contractAddress, amount);
-
-        var contract = web3.Eth.GetContract(Abi, contractAddress);
-        var deposit = contract.GetFunction("deposit");
-        var gas = new HexBigInteger(200000);
-
-        return await deposit.SendTransactionAsync(
-            web3.TransactionManager.Account.Address, gas, null, amount);
-    }
-
-    public async Task<string> WithdrawAsync(decimal amountUSDC)
-    {
         var web3 = await CreateSignedWeb3Async();
-        var amount = Erc20UsdcHelper.ParseUsdc(amountUSDC);
+        var mintPrice = await readOnlyWeb3.Eth.GetContract(Abi, contractAddress)
+            .GetFunction("MINT_PRICE").CallAsync<BigInteger>();
+
+        // allowance
+        await Erc20UsdcHelper.EnsureApprovalAsync(web3, contractAddress, mintPrice);
 
         var contract = web3.Eth.GetContract(Abi, contractAddress);
-        var withdraw = contract.GetFunction("withdraw");
-        var gas = new HexBigInteger(150000);
-
-        return await withdraw.SendTransactionAsync(
-            web3.TransactionManager.Account.Address, gas, null, amount);
-    }
-
-    public async Task<string> PayPlayerAsync(string playerAddress, decimal amountUSDC, string reason)
-    {
-        var web3 = await CreateSignedWeb3Async();
-        var contract = web3.Eth.GetContract(Abi, contractAddress);
-        var payPlayer = contract.GetFunction("payPlayer");
-        var amount = Erc20UsdcHelper.ParseUsdc(amountUSDC);
-        var gas = new HexBigInteger(200000);
-
-        return await payPlayer.SendTransactionAsync(
-            web3.TransactionManager.Account.Address,
-            gas,
-            null,
-            playerAddress,
-            amount,
-            reason);
-    }
-
-    public async Task<string> TransferFromAsync(
-        string fromAddress, string toAddress, decimal amountUSDC, string reason)
-    {
-        var web3 = await CreateSignedWeb3Async();
-        var amount = Erc20UsdcHelper.ParseUsdc(amountUSDC);
-        var signerAddr = web3.TransactionManager.Account.Address;
-
-        var isSelfFrom = !string.IsNullOrEmpty(fromAddress)
-            && string.Equals(signerAddr, fromAddress, StringComparison.OrdinalIgnoreCase);
-        if (isSelfFrom)
-            await Erc20UsdcHelper.EnsureApprovalAsync(web3, contractAddress, amount);
-
-        var contract = web3.Eth.GetContract(Abi, contractAddress);
-        var fn = contract.GetFunction("transferFrom");
-        var gas = new HexBigInteger(200000);
+        var fn = contract.GetFunction("mintRandom");
+        var gas = new HexBigInteger(300000);
 
         return await fn.SendTransactionAsync(
-            signerAddr, gas, null,
-            fromAddress, toAddress, amount, reason);
+            web3.TransactionManager.Account.Address, gas, null);
+    }
+    
+    public async Task<string> SellItemAsync(BigInteger itemId)
+    {
+        var web3 = await CreateSignedWeb3Async();
+        var sellerAddr = web3.TransactionManager.Account.Address;
+
+        var itemsAddr = await GetItemsAddressAsync();
+        var items = web3.Eth.GetContract(Erc1155Abi, itemsAddr);
+
+        var approved = await items.GetFunction("isApprovedForAll")
+            .CallAsync<bool>(sellerAddr, contractAddress);
+        if (!approved)
+        {
+            var setApprovalFn = items.GetFunction("setApprovalForAll");
+            var approveTx = await setApprovalFn.SendTransactionAsync(
+                sellerAddr, new HexBigInteger(100000), null, contractAddress, true);
+            await web3.Eth.Transactions.GetTransactionReceipt.SendRequestAsync(approveTx);
+        }
+
+        var contract = web3.Eth.GetContract(Abi, contractAddress);
+        var sellFn = contract.GetFunction("sellItem");
+        var gas = new HexBigInteger(250000);
+        return await sellFn.SendTransactionAsync(sellerAddr, gas, null, itemId);
     }
 
     private async Task<Web3> CreateSignedWeb3Async()
