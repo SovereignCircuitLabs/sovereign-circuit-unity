@@ -29,8 +29,10 @@ namespace ArcTrading.MacroAgent
 
             float walletSum = 0f;
             float vaultSum = 0f;
+            float gatewaySum = 0f;
             List<float> walletValues = new List<float>();
             List<float> vaultValues = new List<float>();
+            List<float> gatewayValues = new List<float>();
 
             for (int i = 0; i < npcs.Count; i++)
             {
@@ -63,20 +65,25 @@ namespace ArcTrading.MacroAgent
 
                 walletSum += entry.walletUSDC;
                 vaultSum += entry.vaultUSDC;
+                gatewaySum += entry.gatewayUSDC;
                 walletValues.Add(entry.walletUSDC);
                 vaultValues.Add(entry.vaultUSDC);
+                gatewayValues.Add(entry.gatewayUSDC);
             }
 
             int n = Mathf.Max(1, snapshot.npcs.Count);
-            float totalAll = walletSum + vaultSum;
+            float totalAll = walletSum + vaultSum + gatewaySum;
             snapshot.market.npcCount = snapshot.npcs.Count;
             snapshot.market.totalWalletUSDC = walletSum;
             snapshot.market.totalVaultUSDC = vaultSum;
+            snapshot.market.totalGatewayUSDC = gatewaySum;
             snapshot.market.totalUSDC = totalAll;
             snapshot.market.averageWalletUSDC = walletSum / n;
             snapshot.market.averageVaultUSDC = vaultSum / n;
+            snapshot.market.averageGatewayUSDC = gatewaySum / n;
             snapshot.market.walletStdDev = StdDev(walletValues, snapshot.market.averageWalletUSDC);
             snapshot.market.vaultStdDev = StdDev(vaultValues, snapshot.market.averageVaultUSDC);
+            snapshot.market.gatewayStdDev = StdDev(gatewayValues, snapshot.market.averageGatewayUSDC);
             snapshot.market.recentDepositCount = totalDeposit;
             snapshot.market.recentWithdrawCount = totalWithdraw;
             snapshot.market.recentHoldCount = totalHold;
@@ -126,6 +133,7 @@ namespace ArcTrading.MacroAgent
                 isRunningChainAction = npc.IsRunningChainAction,
                 walletUSDC = npc.portfolioState.walletUSDC,
                 vaultUSDC = npc.portfolioState.vaultUSDC,
+                gatewayUSDC = npc.portfolioState.gatewayUSDC,
                 totalUSDC = npc.portfolioState.TotalUSDC,
                 livingBudgetUSDC = npc.portfolioState.livingBudgetUSDC,
                 reserveBudgetUSDC = npc.portfolioState.reserveBudgetUSDC,

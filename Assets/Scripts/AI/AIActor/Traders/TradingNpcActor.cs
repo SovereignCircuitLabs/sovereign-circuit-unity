@@ -344,19 +344,19 @@ public abstract class TradingNpcActor : AIActor
             TradingNpcActivityType activityType = TradingNpcActivityType.TradeHold;
             if (decision.intent == TradeIntent.Deposit)
             {
-                amount = Mathf.Min(amount, portfolioState.walletUSDC - portfolioState.reserveBudgetUSDC);
-                if (amount < portfolioConfig.minTradeUSDC)
+                // Deposit intent → mintRandom: trade USDC (or x402 authorization) for one random NFT.
+                // Amount is fixed at MINT_PRICE per call regardless of decision.amountUSDC (temporarily?)
+                var mintPrice = (float)await contractClient.GetMintPriceUSDCAsync();
+                if (portfolioState.walletUSDC - portfolioState.reserveBudgetUSDC < mintPrice)
                 {
                     return;
                 }
+                amount = mintPrice;
 
-                txResult = await contractClient.DepositAsync((decimal)amount, useNanopayment);
+                txResult = await contractClient.MintRandomAsync(useNanopayment);
                 txHash = useNanopayment ? ExtractX402Tx(txResult) : txResult;
-                if (!useNanopayment)
-                {
-                    portfolioState.walletUSDC -= amount;
-                    portfolioState.vaultUSDC += amount;
-                }
+                // Local optimistic update is unreliable: vault value depends on getSellPrice which
+                // changes with contract balance. Defer to RefreshBalancesAsync at the bottom.
 
                 activityType = useNanopayment
                     ? TradingNpcActivityType.TradeDepositNanopayment
@@ -364,16 +364,22 @@ public abstract class TradingNpcActor : AIActor
             }
             else if (decision.intent == TradeIntent.Withdraw)
             {
-                amount = Mathf.Min(amount, portfolioState.vaultUSDC);
+                // Withdraw intent → sellItem: sell one NFT the NPC owns back to the contract.
+                // Pick the first owned id; sellPrice is what the contract pays at execution time.
+                var ownedId = await contractClient.FindFirstOwnedItemIdAsync(contractClient.WalletAddress);
+                if (!ownedId.HasValue)
+                {
+                    return;
+                }
+                amount = (float)await contractClient.GetSellPriceUSDCAsync(ownedId.Value);
                 if (amount < portfolioConfig.minTradeUSDC)
                 {
                     return;
                 }
 
-                txResult = await contractClient.WithdrawAsync((decimal)amount);
+                txResult = await contractClient.SellItemAsync(ownedId.Value);
                 txHash = txResult;
-                portfolioState.walletUSDC += amount;
-                portfolioState.vaultUSDC -= amount;;
+                // Same as above — sellPrice for *other* ids shifts after this sell, so refresh.
 
                 activityType = TradingNpcActivityType.TradeWithdraw;
             }
@@ -451,8 +457,7 @@ public abstract class TradingNpcActor : AIActor
     private async Task RefreshBalancesAsync()
     {
         portfolioState.walletUSDC = (float)await contractClient.GetWalletBalanceUSDCAsync();
-        portfolioState.vaultUSDC = (float)await contractClient.GetVaultBalanceUSDCAsync() + 
-                                   (float) await contractClient.GetGatewayAvailableBalanceUSDCAsync(contractClient.ContractAddress);
+        portfolioState.vaultUSDC = (float)await contractClient.GetVaultBalanceUSDCAsync();
         portfolioState.gatewayUSDC = (float)await contractClient.GetGatewayAvailableBalanceUSDCAsync();
     }
 

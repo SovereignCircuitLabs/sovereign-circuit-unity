@@ -22,11 +22,14 @@ namespace ArcTrading.MacroAgent
         public int npcCount;
         public float totalWalletUSDC;
         public float totalVaultUSDC;
+        public float totalGatewayUSDC;
         public float totalUSDC;
         public float averageWalletUSDC;
         public float averageVaultUSDC;
+        public float averageGatewayUSDC;
         public float walletStdDev;
         public float vaultStdDev;
+        public float gatewayStdDev;
         public float depositToWithdrawRatio;
         public int recentDepositCount;
         public int recentWithdrawCount;
@@ -54,6 +57,7 @@ namespace ArcTrading.MacroAgent
 
         public float walletUSDC;
         public float vaultUSDC;
+        public float gatewayUSDC;
         public float totalUSDC;
         public float livingBudgetUSDC;
         public float reserveBudgetUSDC;
