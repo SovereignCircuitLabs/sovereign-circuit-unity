@@ -573,6 +573,7 @@ public abstract class TradingNpcActor : AIActor
             displayName = name,
             archetype = archetype,
             walletAddress = WalletAddress,
+            tbaAddress = String.IsNullOrEmpty(contractClient.TbaAddress) ? "" : contractClient.TbaAddress,
             worldPosition = transform.position,
             currentActivity = currentActivity,
             isRunningChainAction = asyncActionRunning,
