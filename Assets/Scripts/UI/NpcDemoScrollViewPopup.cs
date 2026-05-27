@@ -255,6 +255,7 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
     {
         builder.Length = 0;
         builder.AppendLine($"Wallet: {NullText(snapshot.walletAddress)}");
+        builder.AppendLine($"TBA: {NullText(snapshot.tbaAddress)}");
         builder.AppendLine("Gateway: 0x0077777d7EBA4688BDeF3E311b846F25870A19B9"); // arc testnet gateway wallet address
         builder.AppendLine($"Position: {snapshot.worldPosition.x:0.##}, {snapshot.worldPosition.y:0.##}, {snapshot.worldPosition.z:0.##}");
         builder.AppendLine($"Current: {NullText(snapshot.currentActivity)}");

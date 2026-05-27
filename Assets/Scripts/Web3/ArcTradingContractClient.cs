@@ -13,7 +13,7 @@ public class ArcTradingContractClient : MonoBehaviour
     [SerializeField] private string rpcUrl = "https://rpc.testnet.arc.network";
     public string RpcUrl => rpcUrl;
     // GamePayment contract address
-    [SerializeField] private string contractAddress = "0xAB1bF9314884E36688a2D9C9D2Da6fB36d041025";
+    [SerializeField] private string contractAddress = "0x7ED6f087be33A7218Fa8F3EDccC510ec8eC4fFd6";
     public string ContractAddress => contractAddress;
     [SerializeField] private string privateKey;
     [SerializeField] private float initialUsdcCapital = 0.5f;

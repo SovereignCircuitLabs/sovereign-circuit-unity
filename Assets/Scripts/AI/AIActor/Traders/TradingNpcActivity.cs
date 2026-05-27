@@ -46,6 +46,7 @@ public class TradingNpcSnapshot
     public string displayName;
     public TradingNpcArchetype archetype;
     public string walletAddress;
+    public string tbaAddress;
     public Vector3 worldPosition;
     public string currentActivity;
     public bool isRunningChainAction;

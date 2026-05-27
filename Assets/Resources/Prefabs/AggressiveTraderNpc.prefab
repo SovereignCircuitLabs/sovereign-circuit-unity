@@ -1039,7 +1039,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  contractAddress: 0xAB1bF9314884E36688a2D9C9D2Da6fB36d041025
+  contractAddress: 0x7ED6f087be33A7218Fa8F3EDccC510ec8eC4fFd6
   privateKey: 
   initialUsdcCapital: 5
   nftTokenId: 1
@@ -1095,6 +1095,8 @@ MonoBehaviour:
     livingBudgetUSDC: 0
     reserveBudgetUSDC: 0
     tradingBudgetUSDC: 0
+    nftInventoryCount: 0
+    bestSellPriceUSDC: 0
   useNanopayment: 1
   marketPoint: {fileID: 0}
   shopPoint: {fileID: 0}
