@@ -109,7 +109,9 @@ namespace ArcTrading.MacroAgent.Mcp
             tools.Add(new McpTool
             {
                 Name = "get_market_summary",
-                Description = "Aggregated market metrics: totals, averages, std-dev, deposit/withdraw ratios, volatility index. Read-only.",
+                Description = "Aggregated market metrics: totals, averages, std-dev, deposit/withdraw ratios, volatility index, " +
+                              "plus NFT-loot arbitrage signals (totalNftInventory, marketBestSellPriceUSDC, marketArbitrageRatio, " +
+                              "profitableNpcCount). marketArbitrageRatio > 1.0 means mint-then-sell is profitable somewhere. Read-only.",
                 JsonSchema = JObject.Parse("{ \"type\": \"object\", \"properties\": {}, \"required\": [] }"),
                 Handler = _ => Task.FromResult(JsonConvert.SerializeObject(collector.Collect().market))
             });
@@ -141,7 +143,10 @@ namespace ArcTrading.MacroAgent.Mcp
                     totalUSDC = e.totalUSDC,
                     recentDeposits = e.recentDeposits,
                     recentWithdraws = e.recentWithdraws,
-                    recentFailures = e.recentFailures
+                    recentFailures = e.recentFailures,
+                    nftInventoryCount = e.nftInventoryCount,
+                    bestSellPriceUSDC = e.bestSellPriceUSDC,
+                    arbitrageRatio = e.arbitrageRatio
                 });
             }
 

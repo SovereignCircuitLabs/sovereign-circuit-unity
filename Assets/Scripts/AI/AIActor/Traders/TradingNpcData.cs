@@ -76,10 +76,10 @@ public class NpcPortfolioConfig
 [Serializable]
 public class NpcPortfolioState
 {
-    /// <summary>NPC 钱包中可直接使用的 USDC 余额，用于支付生活预算或执行入金操作，也可以存入Vault（即智能合约账户）</summary>
+    /// <summary>NPC 钱包中的 USDC 余额（包含 payment wallet 和 TBA）</summary>
     public float walletUSDC;
 
-    /// <summary>NPC 已存入 Vault 的 USDC 余额，代表资金正在参与 Vault 策略、投资以及收益逻辑，且不在钱包内，只能通过 withdraw 取出</summary>
+    /// <summary>NPC 买到的 NFT 的价值</summary>
     public float vaultUSDC;
 
     /// <summary>NPC 在 Circle Gateway Wallet 中可用的 USDC 余额，用于 x402 nanopayment 即时结算</summary>
@@ -93,6 +93,12 @@ public class NpcPortfolioState
 
     /// <summary>可用于交易或策略投入的 USDC 预算，决定 NPC 是否有足够资金执行交易</summary>
     public float tradingBudgetUSDC;
+
+    /// <summary>NPC 在 GameItems 上持有的全部 NFT 总件数（5 种类型求和），用于判断"是否有库存可卖"。</summary>
+    public int nftInventoryCount;
+
+    /// <summary>GamePayment 当前 5 种 NFT 回收价里的最高值（市场信号）。NPC 用它对比 MintPrice 决定是否套利。</summary>
+    public float bestSellPriceUSDC;
 
     public float TotalUSDC
     {

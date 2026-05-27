@@ -2,6 +2,9 @@ using UnityEngine;
 
 public class ConservativeTraderNpc : TradingNpcActor
 {
+    private const float MintPriceUSDC = 0.1f;
+    private const float MinProfitMultiplier = 2.0f;
+    
     protected override void ConfigurePortfolio()
     {
         archetype = TradingNpcArchetype.ConservativeSaver;
@@ -15,17 +18,41 @@ public class ConservativeTraderNpc : TradingNpcActor
 
     protected override TradeDecision DecideTrade()
     {
-        float roll = Random.value;
+        float sellPrice = portfolioState.bestSellPriceUSDC;
+        float profitRatio = sellPrice / MintPriceUSDC;
+
+        bool hasItem = portfolioState.nftInventoryCount > 0;
+        bool canMint = portfolioState.walletUSDC >= MintPriceUSDC;
+
+        if (hasItem && profitRatio >= MinProfitMultiplier)
+        {
+            return BuildDecision(
+                TradeIntent.Withdraw,
+                0.8f,
+                $"Conservative arbitrage exit: sell price {sellPrice:F4} USDC, ratio {profitRatio:F2}x."
+            );
+        }
+
+        if (canMint && profitRatio >= MinProfitMultiplier)
+        {
+            return BuildDecision(
+                TradeIntent.Deposit,
+                0.5f,
+                $"Conservative arbitrage entry: buy at {MintPriceUSDC:F4}, expected sell {sellPrice:F4}."
+            );
+        }
+
         if (portfolioState.vaultUSDC > portfolioState.tradingBudgetUSDC * 1.25f)
         {
-            return BuildDecision(TradeIntent.Withdraw, 0.7f, "vault exposure above conservative target");
+            return BuildDecision(
+                TradeIntent.Withdraw,
+                0.6f,
+                "Conservative risk control: vault exposure exceeds target."
+            );
         }
 
-        if (roll < 0.25f)
-        {
-            return BuildDecision(TradeIntent.Deposit, 0.5f, "small low-risk allocation");
-        }
-
-        return TradeDecision.Hold("waiting for safer entry");
+        return TradeDecision.Hold(
+            $"Conservative hold: spread too small, sell price {sellPrice:F4} USDC."
+        );
     }
 }

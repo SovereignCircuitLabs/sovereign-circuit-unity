@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using System.Threading.Tasks;
 using ArcTrading.Nanopayment;
+using Nethereum.Hex.HexConvertors.Extensions;
 using Nethereum.Hex.HexTypes;
 using Nethereum.Web3;
 using Nethereum.Web3.Accounts;
@@ -136,18 +137,19 @@ public class ArcTradingContractClient : MonoBehaviour
         var balance = await Erc20UsdcHelper.GetBalanceAsync(web3, owner);
         return FromUsdc(balance);
     }
-
-    /// <summary>
-    /// Vault value = NPC's NFT inventory marked to the contract's buyback price,
-    /// i.e. Σ over the 5 managed item types of: balanceOf(npc, id) × getSellPrice(id).
-    /// </summary>
-    public async Task<decimal> GetVaultBalanceUSDCAsync()
+    
+    public async Task<decimal> GetWalletBalanceUSDCAsync(string account)
     {
-        var web3 = await CreateSignedWeb3Async();
-        return await GetVaultBalanceUSDCAsync(web3.TransactionManager.Account.Address);
+        if (string.IsNullOrWhiteSpace(account)) return 0m;
+        var balance = await Erc20UsdcHelper.GetBalanceAsync(readOnlyWeb3, account);
+        return FromUsdc(balance);
     }
 
-    private async Task<decimal> GetVaultBalanceUSDCAsync(string account)
+    /// <summary>
+    /// Vault value = NPC's NFT inventory(TBA) marked to the contract's buyback price,
+    /// i.e. Σ over the 5 managed item types of: balanceOf(npc, id) × getSellPrice(id).
+    /// </summary>
+    public async Task<decimal> GetVaultBalanceUSDCAsync(string account)
     {
         var itemIds = await GetItemIdsAsync();
         var itemsAddr = await GetItemsAddressAsync();
@@ -206,6 +208,39 @@ public class ArcTradingContractClient : MonoBehaviour
         for (int i = 0; i < ids.Length; i++)
             prices[i] = await GetSellPriceUSDCAsync(ids[i]);
         return prices;
+    }
+
+    /// <summary>
+    /// Highest buyback price across all 5 managed NFT types — used as a market arbitrage signal
+    /// ("if anything is paying above MintPrice, mint or sell"). Independent of who owns what.
+    /// </summary>
+    public async Task<decimal> GetBestSellPriceUSDCAsync()
+    {
+        var prices = await GetAllSellPricesUSDCAsync();
+        decimal max = 0m;
+        for (int i = 0; i < prices.Length; i++)
+            if (prices[i] > max) max = prices[i];
+        return max;
+    }
+
+    /// <summary>
+    /// Total NFTs (sum of balanceOf across the 5 types) held by `account`.
+    /// Pass the NPC's TBA address — that's where x402 mints land in the new flow.
+    /// </summary>
+    public async Task<int> GetNftInventoryCountAsync(string account)
+    {
+        if (string.IsNullOrWhiteSpace(account)) return 0;
+        var ids = await GetItemIdsAsync();
+        var itemsAddr = await GetItemsAddressAsync();
+        var items = readOnlyWeb3.Eth.GetContract(Erc1155Abi, itemsAddr);
+        var balanceOfFn = items.GetFunction("balanceOf");
+        int total = 0;
+        for (int i = 0; i < ids.Length; i++)
+        {
+            var bal = await balanceOfFn.CallAsync<BigInteger>(account, ids[i]);
+            total += (int)bal;
+        }
+        return total;
     }
 
     public async Task<BigInteger> GetCirculatingSupplyAsync(BigInteger itemId)
@@ -476,28 +511,40 @@ public class ArcTradingContractClient : MonoBehaviour
             web3.TransactionManager.Account.Address, gas, null);
     }
     
-    public async Task<string> SellItemAsync(BigInteger itemId)
+    /// <summary>
+    /// Sell one NFT held by the NPC's ERC-6551 TBA.
+    /// </summary>
+    public async Task<string> SellItemAsync(string tbaAddress, BigInteger itemId)
     {
-        var web3 = await CreateSignedWeb3Async();
-        var sellerAddr = web3.TransactionManager.Account.Address;
+        if (npcPaymentWalletService == null || npcPaymentWalletService.NpcContract == null)
+            throw new InvalidOperationException(
+                $"{name}: SellItemAsync needs NpcCharacterContractClient (NFT owner key) " +
+                "to sign ERC-6551 execute — wire npcPaymentWalletService in the Inspector.");
 
         var itemsAddr = await GetItemsAddressAsync();
-        var items = web3.Eth.GetContract(Erc1155Abi, itemsAddr);
+        var itemsReadonly = readOnlyWeb3.Eth.GetContract(Erc1155Abi, itemsAddr);
 
-        var approved = await items.GetFunction("isApprovedForAll")
-            .CallAsync<bool>(sellerAddr, contractAddress);
+        // 检查 TBA 是否已经授权 GamePayment 操作它的 ERC1155 NFT，没授权的话先授权
+        var approved = await itemsReadonly.GetFunction("isApprovedForAll")
+            .CallAsync<bool>(tbaAddress, contractAddress);
         if (!approved)
         {
-            var setApprovalFn = items.GetFunction("setApprovalForAll");
-            var approveTx = await setApprovalFn.SendTransactionAsync(
-                sellerAddr, new HexBigInteger(100000), null, contractAddress, true);
-            await web3.Eth.Transactions.GetTransactionReceipt.SendRequestAsync(approveTx);
+            var setApprovalData = itemsReadonly.GetFunction("setApprovalForAll")
+                .GetData(contractAddress, true)
+                .HexToByteArray();
+            await npcPaymentWalletService.NpcContract.ExecuteTbaAsOwnerAsync(
+                tbaAddress, itemsAddr, BigInteger.Zero, setApprovalData,
+                new HexBigInteger(200000), waitForReceipt: true);
         }
 
-        var contract = web3.Eth.GetContract(Abi, contractAddress);
-        var sellFn = contract.GetFunction("sellItem");
-        var gas = new HexBigInteger(250000);
-        return await sellFn.SendTransactionAsync(sellerAddr, gas, null, itemId);
+        // 让 TBA 调用 GamePayment.sellItem(itemId)
+        var sellItemData = readOnlyWeb3.Eth.GetContract(Abi, contractAddress)
+            .GetFunction("sellItem")
+            .GetData(itemId)
+            .HexToByteArray();
+        return await npcPaymentWalletService.NpcContract.ExecuteTbaAsOwnerAsync(
+            tbaAddress, contractAddress, BigInteger.Zero, sellItemData,
+            new HexBigInteger(400000), waitForReceipt: false);
     }
 
     private async Task<Web3> CreateSignedWeb3Async()

@@ -9,14 +9,14 @@ using BtTaskStatus = CleverCrow.Fluid.BTs.Tasks.TaskStatus;
 [RequireComponent(typeof(ArcTradingContractClient))]
 public abstract class TradingNpcActor : AIActor
 {
-    [Header("Trader NPC")]
-    public TradingNpcArchetype archetype = TradingNpcArchetype.BalancedTrader;
+    [Header("Trader NPC")] public TradingNpcArchetype archetype = TradingNpcArchetype.BalancedTrader;
     public NpcPortfolioConfig portfolioConfig = new NpcPortfolioConfig();
     public NpcPortfolioState portfolioState = new NpcPortfolioState();
     [SerializeField] private bool useNanopayment = false;
 
-    [Header("World Targets")]
-    [SerializeField] private Transform marketPoint;
+    [Header("World Targets")] [SerializeField]
+    private Transform marketPoint;
+
     [SerializeField] private Transform shopPoint;
     [SerializeField] private Transform homePoint;
     [SerializeField] private float arriveHeight = 0.5f;
@@ -89,8 +89,8 @@ public abstract class TradingNpcActor : AIActor
     protected override void Update()
     {
         base.Update();
-        
-        if(Input.GetKeyDown(KeyCode.Escape))
+
+        if (Input.GetKeyDown(KeyCode.Escape))
             Application.Quit();
     }
 
@@ -198,22 +198,22 @@ public abstract class TradingNpcActor : AIActor
     {
         brain = new BehaviorTreeBuilder(gameObject)
             .Selector()
-                .Sequence("Buy Living Needs")
-                    .Condition("Needs Supplies?", NeedsLivingSupplies)
-                    .Do("Go To Shop", () => MoveTo(shopPoint))
-                    .Do("Buy Supplies", BuyLivingSupplies)
-                .End()
-                .Sequence("Rebalance Portfolio")
-                    .Condition("Needs Rebalance?", NeedsPortfolioRebalance)
-                    .Do("Go Home", () => MoveTo(homePoint))
-                    .Do("Rebalance", RebalancePortfolio)
-                .End()
-                .Sequence("Trade On Chain")
-                    .Condition("Can Trade?", CanTrade)
-                    .Do("Go To Market", () => MoveTo(marketPoint))
-                    .Do("Execute Trade", ExecuteTrade)
-                .End()
-                .Do("Wander", Wander)
+            .Sequence("Buy Living Needs")
+            .Condition("Needs Supplies?", NeedsLivingSupplies)
+            .Do("Go To Shop", () => MoveTo(shopPoint))
+            .Do("Buy Supplies", BuyLivingSupplies)
+            .End()
+            .Sequence("Rebalance Portfolio")
+            .Condition("Needs Rebalance?", NeedsPortfolioRebalance)
+            .Do("Go Home", () => MoveTo(homePoint))
+            .Do("Rebalance", RebalancePortfolio)
+            .End()
+            .Sequence("Trade On Chain")
+            .Condition("Can Trade?", CanTrade)
+            .Do("Go To Market", () => MoveTo(marketPoint))
+            .Do("Execute Trade", ExecuteTrade)
+            .End()
+            .Do("Wander", Wander)
             .End()
             .Build();
     }
@@ -274,7 +274,8 @@ public abstract class TradingNpcActor : AIActor
 
     private BtTaskStatus BuyLivingSupplies()
     {
-        float spend = Mathf.Min(portfolioState.walletUSDC, Mathf.Max(0.005f, portfolioConfig.minimumLivingBudgetUSDC * 0.25f));
+        float spend = Mathf.Min(portfolioState.walletUSDC,
+            Mathf.Max(0.005f, portfolioConfig.minimumLivingBudgetUSDC * 0.25f));
         portfolioState.walletUSDC -= spend;
         portfolioState.livingBudgetUSDC += spend;
         lastLivingSpendTime = Time.time;
@@ -302,7 +303,8 @@ public abstract class TradingNpcActor : AIActor
                 TradingNpcActivityType.Rebalance,
                 "Portfolio rebalanced",
                 $"living={portfolioState.livingBudgetUSDC:0.####}, reserve={portfolioState.reserveBudgetUSDC:0.####}, trading={portfolioState.tradingBudgetUSDC:0.####}");
-            Debug.Log($"{LogPrefix} rebalanced portfolio: living={portfolioState.livingBudgetUSDC:0.####}, reserve={portfolioState.reserveBudgetUSDC:0.####}, trading={portfolioState.tradingBudgetUSDC:0.####}");
+            Debug.Log(
+                $"{LogPrefix} rebalanced portfolio: living={portfolioState.livingBudgetUSDC:0.####}, reserve={portfolioState.reserveBudgetUSDC:0.####}, trading={portfolioState.tradingBudgetUSDC:0.####}");
         });
     }
 
@@ -351,12 +353,11 @@ public abstract class TradingNpcActor : AIActor
                 {
                     return;
                 }
+
                 amount = mintPrice;
 
                 txResult = await contractClient.MintRandomAsync(useNanopayment);
                 txHash = useNanopayment ? ExtractX402Tx(txResult) : txResult;
-                // Local optimistic update is unreliable: vault value depends on getSellPrice which
-                // changes with contract balance. Defer to RefreshBalancesAsync at the bottom.
 
                 activityType = useNanopayment
                     ? TradingNpcActivityType.TradeDepositNanopayment
@@ -365,21 +366,25 @@ public abstract class TradingNpcActor : AIActor
             else if (decision.intent == TradeIntent.Withdraw)
             {
                 // Withdraw intent → sellItem: sell one NFT the NPC owns back to the contract.
-                // Pick the first owned id; sellPrice is what the contract pays at execution time.
-                var ownedId = await contractClient.FindFirstOwnedItemIdAsync(contractClient.WalletAddress);
+                // Inventory lives on the TBA (x402 mint route), so look there — same address
+                // used for nftInventoryCount / vaultUSDC in RefreshBalancesAsync.
+                var inventoryAddress = !string.IsNullOrWhiteSpace(contractClient.TbaAddress)
+                    ? contractClient.TbaAddress
+                    : contractClient.WalletAddress;
+                var ownedId = await contractClient.FindFirstOwnedItemIdAsync(inventoryAddress);
                 if (!ownedId.HasValue)
                 {
                     return;
                 }
+
                 amount = (float)await contractClient.GetSellPriceUSDCAsync(ownedId.Value);
                 if (amount < portfolioConfig.minTradeUSDC)
                 {
                     return;
                 }
 
-                txResult = await contractClient.SellItemAsync(ownedId.Value);
+                txResult = await contractClient.SellItemAsync(inventoryAddress, ownedId.Value);
                 txHash = txResult;
-                // Same as above — sellPrice for *other* ids shifts after this sell, so refresh.
 
                 activityType = TradingNpcActivityType.TradeWithdraw;
             }
@@ -393,9 +398,10 @@ public abstract class TradingNpcActor : AIActor
                 decision.reason,
                 txHash,
                 amount);
-            
+
             await RefreshBalancesAsync();
-            Debug.Log($"{LogPrefix} {decision.intent}{modeTag} {amount:0.####} USDC, reason={decision.reason}, tx={txHash}");
+            Debug.Log(
+                $"{LogPrefix} {decision.intent}{modeTag} {amount:0.####} USDC, reason={decision.reason}, tx={txHash}");
         });
     }
 
@@ -424,8 +430,10 @@ public abstract class TradingNpcActor : AIActor
                     TradingNpcActivityType.Initialized,
                     "Payment wallet bound",
                     $"tokenId={signer.Value.TokenId}, paymentWallet={signer.Value.Address}, version={signer.Value.Version}");
-                Debug.Log($"{LogPrefix} payment wallet bound: tokenId={signer.Value.TokenId}, addr={signer.Value.Address}, version={signer.Value.Version}");
+                Debug.Log(
+                    $"{LogPrefix} payment wallet bound: tokenId={signer.Value.TokenId}, addr={signer.Value.Address}, version={signer.Value.Version}");
             }
+
             await contractClient.EnsureNpcHasInitialCapitalAsync();
             await RefreshBalancesAsync();
             AllocateBudgetsFromBalances();
@@ -445,7 +453,8 @@ public abstract class TradingNpcActor : AIActor
         catch (NpcSignerNotOwned ex)
         {
             Debug.LogWarning($"{LogPrefix} {ex.Message}");
-            AddActivity(TradingNpcActivityType.ChainActionFailed, "Payment wallet not owned by this device", ex.Message);
+            AddActivity(TradingNpcActivityType.ChainActionFailed, "Payment wallet not owned by this device",
+                ex.Message);
         }
         catch (Exception ex)
         {
@@ -456,9 +465,20 @@ public abstract class TradingNpcActor : AIActor
 
     private async Task RefreshBalancesAsync()
     {
-        portfolioState.walletUSDC = (float)await contractClient.GetWalletBalanceUSDCAsync();
-        portfolioState.vaultUSDC = (float)await contractClient.GetVaultBalanceUSDCAsync();
+        var inventoryAddress = !string.IsNullOrWhiteSpace(contractClient.TbaAddress)
+            ? contractClient.TbaAddress
+            : contractClient.WalletAddress;
+
+        float traderUsdc = (float)await contractClient.GetWalletBalanceUSDCAsync();
+        float tbaUsdc = !string.Equals(inventoryAddress, contractClient.WalletAddress,
+            StringComparison.OrdinalIgnoreCase)
+            ? (float)await contractClient.GetWalletBalanceUSDCAsync(inventoryAddress)
+            : 0f;
+        portfolioState.walletUSDC = traderUsdc + tbaUsdc;
+        portfolioState.vaultUSDC = (float)await contractClient.GetVaultBalanceUSDCAsync(inventoryAddress);
         portfolioState.gatewayUSDC = (float)await contractClient.GetGatewayAvailableBalanceUSDCAsync();
+        portfolioState.nftInventoryCount = await contractClient.GetNftInventoryCountAsync(inventoryAddress);
+        portfolioState.bestSellPriceUSDC = (float)await contractClient.GetBestSellPriceUSDCAsync();
     }
 
     private void AllocateBudgetsFromBalances()
@@ -622,40 +642,69 @@ public abstract class TradingNpcActor : AIActor
     {
         return new List<NpcFieldDisplayInfo>
         {
-            Field("Config", "livingNeedsWeight", "Living Needs Weight", portfolioConfig.livingNeedsWeight, "Share of total funds reserved for living needs."),
-            Field("Config", "reserveWeight", "Reserve Weight", portfolioConfig.reserveWeight, "Share of total funds kept as safety reserve."),
-            Field("Config", "tradingWeight", "Trading Weight", portfolioConfig.tradingWeight, "Share of total funds allowed for strategy/trading decisions."),
-            Field("Config", "minimumLivingBudgetUSDC", "Minimum Living Budget", portfolioConfig.minimumLivingBudgetUSDC, "When living budget falls below this value, NPC buys supplies."),
-            Field("Config", "minimumReserveBudgetUSDC", "Minimum Reserve Budget", portfolioConfig.minimumReserveBudgetUSDC, "Human-readable lower reserve target for UI and tuning."),
-            Field("Config", "rebalanceInterval", "Rebalance Interval", portfolioConfig.rebalanceInterval, "Seconds between portfolio rebalances."),
-            Field("Config", "chainActionCooldown", "Chain Action Cooldown", portfolioConfig.chainActionCooldown, "Minimum seconds between deposit/withdraw transactions."),
-            Field("Config", "minTradeUSDC", "Minimum Trade Size", portfolioConfig.minTradeUSDC, "Smallest on-chain trade amount this NPC will attempt."),
-            Field("Config", "maxTradeUSDC", "Maximum Trade Size", portfolioConfig.maxTradeUSDC, "Largest on-chain trade amount this NPC will attempt."),
-            Field("State", "walletUSDC", "Wallet USDC", portfolioState.walletUSDC, "USDC immediately available in the NPC wallet."),
-            Field("State", "vaultUSDC", "Vault USDC", portfolioState.vaultUSDC, "USDC currently deposited into the vault contract."),
-            Field("State", "gatewayUSDC", "Gateway USDC", portfolioState.gatewayUSDC, "USDC available in the Circle Gateway Wallet for x402 nanopayments."),
-            Field("State", "livingBudgetUSDC", "Living Budget", portfolioState.livingBudgetUSDC, "Budget currently allocated to living needs."),
-            Field("State", "reserveBudgetUSDC", "Reserve Budget", portfolioState.reserveBudgetUSDC, "Budget currently allocated as safety reserve."),
-            Field("State", "tradingBudgetUSDC", "Trading Budget", portfolioState.tradingBudgetUSDC, "Budget currently available for trade decisions."),
-            Field("State", "TotalUSDC", "Total USDC", portfolioState.TotalUSDC, "Wallet plus vault plus gateway balance.")
+            Field("Config", "livingNeedsWeight", "Living Needs Weight", portfolioConfig.livingNeedsWeight,
+                "Share of total funds reserved for living needs."),
+            Field("Config", "reserveWeight", "Reserve Weight", portfolioConfig.reserveWeight,
+                "Share of total funds kept as safety reserve."),
+            Field("Config", "tradingWeight", "Trading Weight", portfolioConfig.tradingWeight,
+                "Share of total funds allowed for strategy/trading decisions."),
+            Field("Config", "minimumLivingBudgetUSDC", "Minimum Living Budget", portfolioConfig.minimumLivingBudgetUSDC,
+                "When living budget falls below this value, NPC buys supplies."),
+            Field("Config", "minimumReserveBudgetUSDC", "Minimum Reserve Budget",
+                portfolioConfig.minimumReserveBudgetUSDC, "Human-readable lower reserve target for UI and tuning."),
+            Field("Config", "rebalanceInterval", "Rebalance Interval", portfolioConfig.rebalanceInterval,
+                "Seconds between portfolio rebalances."),
+            Field("Config", "chainActionCooldown", "Chain Action Cooldown", portfolioConfig.chainActionCooldown,
+                "Minimum seconds between deposit/withdraw transactions."),
+            Field("Config", "minTradeUSDC", "Minimum Trade Size", portfolioConfig.minTradeUSDC,
+                "Smallest on-chain trade amount this NPC will attempt."),
+            Field("Config", "maxTradeUSDC", "Maximum Trade Size", portfolioConfig.maxTradeUSDC,
+                "Largest on-chain trade amount this NPC will attempt."),
+            Field("State", "walletUSDC", "Wallet USDC", portfolioState.walletUSDC,
+                "USDC available in the NPC wallet(include payment wallet and TBA)."),
+            Field("State", "vaultUSDC", "Vault USDC", portfolioState.vaultUSDC,
+                "USDC value of NFTs currently held in the vault (TBA)."),
+            Field("State", "gatewayUSDC", "Gateway USDC", portfolioState.gatewayUSDC,
+                "USDC available in the Circle Gateway Wallet for x402 nanopayments."),
+            Field("State", "livingBudgetUSDC", "Living Budget", portfolioState.livingBudgetUSDC,
+                "Budget currently allocated to living needs."),
+            Field("State", "reserveBudgetUSDC", "Reserve Budget", portfolioState.reserveBudgetUSDC,
+                "Budget currently allocated as safety reserve."),
+            Field("State", "tradingBudgetUSDC", "Trading Budget", portfolioState.tradingBudgetUSDC,
+                "Budget currently available for trade decisions."),
+            Field("State", "TotalUSDC", "Total USDC", portfolioState.TotalUSDC,
+                "Wallet plus vault plus gateway balance.")
         };
     }
 
     private static string ExtractX402Tx(string json)
     {
         if (string.IsNullOrEmpty(json)) return null;
-        try { return JObject.Parse(json).Value<string>("x402_tx"); }
-        catch (Exception) { return json; }
+        try
+        {
+            return JObject.Parse(json).Value<string>("x402_tx");
+        }
+        catch (Exception)
+        {
+            return json;
+        }
     }
 
     private static string ExtractX402Amount(string json)
     {
         if (string.IsNullOrEmpty(json)) return null;
-        try { return JObject.Parse(json).Value<string>("amount"); }
-        catch (Exception) { return json; }
+        try
+        {
+            return JObject.Parse(json).Value<string>("amount");
+        }
+        catch (Exception)
+        {
+            return json;
+        }
     }
 
-    private static NpcFieldDisplayInfo Field(string group, string fieldName, string displayName, float value, string comment)
+    private static NpcFieldDisplayInfo Field(string group, string fieldName, string displayName, float value,
+        string comment)
     {
         return new NpcFieldDisplayInfo
         {

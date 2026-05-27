@@ -7,6 +7,10 @@ namespace ArcTrading.MacroAgent
     public class EconomySnapshotCollector
     {
         private const float RecentActivityWindowSeconds = 120f;
+        // Mirrors GamePayment.MINT_PRICE (0.10 USDC). Hard-coded here to keep Collect() sync;
+        // if the contract constant changes, update this too — same caveat as the per-NPC
+        // MintPriceUSDC constants in {Aggressive,Balanced,Conservative}TraderNpc.cs.
+        private const float MintPriceUSDC = 0.10f;
 
         public EconomySnapshot Collect()
         {
@@ -33,6 +37,11 @@ namespace ArcTrading.MacroAgent
             List<float> walletValues = new List<float>();
             List<float> vaultValues = new List<float>();
             List<float> gatewayValues = new List<float>();
+
+            int totalInventory = 0;
+            int npcsWithInventory = 0;
+            int profitableNpcCount = 0;
+            float marketBestSellPrice = 0f;
 
             for (int i = 0; i < npcs.Count; i++)
             {
@@ -69,6 +78,12 @@ namespace ArcTrading.MacroAgent
                 walletValues.Add(entry.walletUSDC);
                 vaultValues.Add(entry.vaultUSDC);
                 gatewayValues.Add(entry.gatewayUSDC);
+
+                totalInventory += entry.nftInventoryCount;
+                if (entry.nftInventoryCount > 0) npcsWithInventory++;
+                if (entry.arbitrageRatio > 1f) profitableNpcCount++;
+                if (entry.bestSellPriceUSDC > marketBestSellPrice)
+                    marketBestSellPrice = entry.bestSellPriceUSDC;
             }
 
             int n = Mathf.Max(1, snapshot.npcs.Count);
@@ -92,6 +107,15 @@ namespace ArcTrading.MacroAgent
                 : totalDeposit;
             float concentration = totalAll > 0f ? (snapshot.market.vaultStdDev / Mathf.Max(0.0001f, totalAll / n)) : 0f;
             snapshot.market.volatilityIndex = Mathf.Clamp01(concentration);
+
+            snapshot.market.totalNftInventory = totalInventory;
+            snapshot.market.averageNftInventory = (float)totalInventory / n;
+            snapshot.market.npcsWithInventory = npcsWithInventory;
+            snapshot.market.profitableNpcCount = profitableNpcCount;
+            snapshot.market.marketBestSellPriceUSDC = marketBestSellPrice;
+            snapshot.market.marketArbitrageRatio = MintPriceUSDC > 0f
+                ? marketBestSellPrice / MintPriceUSDC
+                : 0f;
 
             snapshot.chain.runningChainActions = runningChain;
             snapshot.chain.recentChainFailures = totalFailure;
@@ -144,7 +168,12 @@ namespace ArcTrading.MacroAgent
                 minTradeUSDC = npc.portfolioConfig.minTradeUSDC,
                 maxTradeUSDC = npc.portfolioConfig.maxTradeUSDC,
                 rebalanceInterval = npc.portfolioConfig.rebalanceInterval,
-                chainActionCooldown = npc.portfolioConfig.chainActionCooldown
+                chainActionCooldown = npc.portfolioConfig.chainActionCooldown,
+                nftInventoryCount = npc.portfolioState.nftInventoryCount,
+                bestSellPriceUSDC = npc.portfolioState.bestSellPriceUSDC,
+                arbitrageRatio = MintPriceUSDC > 0f
+                    ? npc.portfolioState.bestSellPriceUSDC / MintPriceUSDC
+                    : 0f
             };
 
             List<TradingNpcActivityRecord> recent = npc.GetRecentActivities(40);
