@@ -35,6 +35,19 @@ namespace ArcTrading.MacroAgent
         public int recentWithdrawCount;
         public int recentHoldCount;
         public float volatilityIndex;
+
+        // ----- Arbitrage / NFT-loot signals -----
+        /// <summary>Sum of NFT items held across all NPCs (vault inventory at their TBAs).</summary>
+        public int totalNftInventory;
+        public float averageNftInventory;
+        /// <summary>Number of NPCs currently holding ≥1 NFT (i.e. able to call sellItem).</summary>
+        public int npcsWithInventory;
+        /// <summary>Highest buyback price observed across NPCs' last refresh — same global signal queried at slightly different ticks.</summary>
+        public float marketBestSellPriceUSDC;
+        /// <summary>marketBestSellPriceUSDC ÷ MINT_PRICE. >1.0 means buying then immediately selling is profitable on at least one NFT type.</summary>
+        public float marketArbitrageRatio;
+        /// <summary>Count of NPCs whose own bestSellPriceUSDC > MINT_PRICE — i.e. the per-NPC view of "arbitrage exists".</summary>
+        public int profitableNpcCount;
     }
 
     [Serializable]
@@ -75,6 +88,14 @@ namespace ArcTrading.MacroAgent
         public int recentWithdraws;
         public int recentHolds;
         public int recentFailures;
+
+        // ----- Arbitrage / NFT-loot signals -----
+        /// <summary>How many GameItems NFTs this NPC currently holds (vault inventory).</summary>
+        public int nftInventoryCount;
+        /// <summary>Best buyback price observed on this NPC's last refresh — drives the arbitrage decision in DecideTrade.</summary>
+        public float bestSellPriceUSDC;
+        /// <summary>bestSellPriceUSDC ÷ MINT_PRICE. >1.0 = mint-then-sell is profitable per this NPC's last read.</summary>
+        public float arbitrageRatio;
     }
 
     [Serializable]

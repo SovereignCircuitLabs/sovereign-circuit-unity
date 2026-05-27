@@ -2,6 +2,9 @@ using UnityEngine;
 
 public class AggressiveTraderNpc : TradingNpcActor
 {
+    private const float MintPriceUSDC = 0.1f;
+    private const float MinProfitMultiplier = 1.1f;
+    
     protected override void ConfigurePortfolio()
     {
         archetype = TradingNpcArchetype.AggressiveSpeculator;
@@ -15,17 +18,41 @@ public class AggressiveTraderNpc : TradingNpcActor
 
     protected override TradeDecision DecideTrade()
     {
-        float roll = Random.value;
-        if (roll < 0.65f)
+        float sellPrice = portfolioState.bestSellPriceUSDC;
+        float profitRatio = sellPrice / MintPriceUSDC;
+
+        bool hasItem = portfolioState.nftInventoryCount > 0;
+        bool canMint = portfolioState.walletUSDC >= MintPriceUSDC;
+
+        if (hasItem && profitRatio >= MinProfitMultiplier)
         {
-            return BuildDecision(TradeIntent.Deposit, 1.5f, "aggressive momentum entry");
+            return BuildDecision(
+                TradeIntent.Withdraw,
+                1.2f,
+                $"Aggressive fast exit: capturing spread at {sellPrice:F4} USDC, ratio {profitRatio:F2}x."
+            );
         }
 
-        if (roll < 0.85f)
+        if (canMint && profitRatio >= MinProfitMultiplier)
         {
-            return BuildDecision(TradeIntent.Withdraw, 1.1f, "fast risk reduction");
+            return BuildDecision(
+                TradeIntent.Deposit,
+                1.5f,
+                $"Aggressive arbitrage entry: minting against profitable buyback spread, ratio {profitRatio:F2}x."
+            );
         }
 
-        return TradeDecision.Hold("waiting for volatility");
+        if (canMint && Random.value < 0.10f)
+        {
+            return BuildDecision(
+                TradeIntent.Deposit,
+                0.6f,
+                "Aggressive exploration: small speculative mint despite weak spread."
+            );
+        }
+
+        return TradeDecision.Hold(
+            $"Aggressive hold: no profitable spread, ratio {profitRatio:F2}x."
+        );
     }
 }

@@ -156,6 +156,43 @@ public class NpcCharacterContractClient : MonoBehaviour
             ownerTxGate.Release();
         }
     }
+
+    // ERC-6551 TBA accepts execute() only from the parent NFT's owner
+    // i.e. must sign from nftOwnerPrivateKey
+    private const string Erc6551AccountAbi = @"[
+      {""inputs"":[{""internalType"":""address"",""name"":""to"",""type"":""address""},{""internalType"":""uint256"",""name"":""value"",""type"":""uint256""},{""internalType"":""bytes"",""name"":""data"",""type"":""bytes""},{""internalType"":""uint8"",""name"":""operation"",""type"":""uint8""}],""name"":""execute"",""outputs"":[{""internalType"":""bytes"",""name"":"""",""type"":""bytes""}],""stateMutability"":""payable"",""type"":""function""}
+    ]";
+
+    public async Task<string> ExecuteTbaAsOwnerAsync(
+        string tbaAddress,
+        string target,
+        BigInteger value,
+        byte[] data,
+        HexBigInteger gas,
+        bool waitForReceipt)
+    {
+        if (string.IsNullOrWhiteSpace(tbaAddress))
+            throw new ArgumentException("tbaAddress is required", nameof(tbaAddress));
+        if (string.IsNullOrWhiteSpace(target))
+            throw new ArgumentException("target is required", nameof(target));
+
+        await ownerTxGate.WaitAsync();
+        try
+        {
+            var web3 = await CreateSignedWeb3Async();
+            var tba = web3.Eth.GetContract(Erc6551AccountAbi, tbaAddress);
+            var executeFn = tba.GetFunction("execute");
+            var ownerAddr = web3.TransactionManager.Account.Address;
+            var txHash = await executeFn.SendTransactionAsync(
+                ownerAddr, gas, null, target, value, data ?? Array.Empty<byte>(), (byte)0);
+            if (waitForReceipt) await WaitReceiptAsync(web3, txHash);
+            return txHash;
+        }
+        finally
+        {
+            ownerTxGate.Release();
+        }
+    }
     
     private static async Task WaitReceiptAsync(Web3 web3, string txHash)
     {

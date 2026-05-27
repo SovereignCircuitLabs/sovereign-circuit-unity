@@ -2,6 +2,9 @@ using UnityEngine;
 
 public class BalancedTraderNpc : TradingNpcActor
 {
+    private const float MintPriceUSDC = 0.1f;
+    private const float MinProfitMultiplier = 1.3f;
+    
     protected override void ConfigurePortfolio()
     {
         archetype = TradingNpcArchetype.BalancedTrader;
@@ -15,17 +18,39 @@ public class BalancedTraderNpc : TradingNpcActor
 
     protected override TradeDecision DecideTrade()
     {
-        float roll = Random.value;
-        if (roll < 0.45f)
+        float sellPrice = portfolioState.bestSellPriceUSDC;
+        float profitRatio = sellPrice / MintPriceUSDC;
+
+        bool hasItem = portfolioState.nftInventoryCount > 0;
+        bool canMint = portfolioState.walletUSDC >= MintPriceUSDC;
+
+        if (hasItem && profitRatio >= MinProfitMultiplier)
         {
-            return BuildDecision(TradeIntent.Deposit, 1f, "balanced buy signal");
+            return BuildDecision(
+                TradeIntent.Withdraw,
+                0.9f,
+                $"Balanced arbitrage exit: selling NFT into favorable buyback price {sellPrice:F4} USDC."
+            );
         }
 
-        if (roll < 0.70f)
+        if (canMint && profitRatio >= MinProfitMultiplier)
         {
-            return BuildDecision(TradeIntent.Withdraw, 0.8f, "taking partial profit");
+            return BuildDecision(
+                TradeIntent.Deposit,
+                1.0f,
+                $"Balanced arbitrage entry: mint cost {MintPriceUSDC:F4}, sell price {sellPrice:F4}, ratio {profitRatio:F2}x."
+            );
         }
 
-        return TradeDecision.Hold("portfolio is close to target");
+        if (hasItem && profitRatio < 1.0f)
+        {
+            return TradeDecision.Hold(
+                $"Balanced hold inventory: sell price below mint cost, ratio {profitRatio:F2}x."
+            );
+        }
+
+        return TradeDecision.Hold(
+            $"Balanced hold: market close to equilibrium, ratio {profitRatio:F2}x."
+        );
     }
 }
