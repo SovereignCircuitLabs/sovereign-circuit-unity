@@ -49,10 +49,10 @@ namespace ArcTrading.Nanopayment
         private const int authorizationTtlSeconds = 604900;
 
         [Header("Configuration")]
-        public string x402ServerUrl = "http://localhost:4021/risk-profile";
+        public string x402ServerBaseUrl = "http://localhost:4021/item/";
         // Upper bound for any single x402 payment, in USDC. The server quotes the actual price
         // via the 402 PAYMENT-REQUIRED header; we refuse to sign if it exceeds this cap.
-        public float maxNanopaymentUsdc = 0.5f;
+        public float maxNanopaymentUsdc = 5f;
 
         // Smallest-unit amount signed for in the most recent successful x402 call.
         // Callers can read this immediately after awaiting FetchPaywalledResourceAsync to know the exact
@@ -62,21 +62,21 @@ namespace ArcTrading.Nanopayment
         [SerializeField] private int httpTimeoutSeconds = 20;
         [SerializeField] private bool verboseLogging = false;
         
-        [ContextMenu("Fetch Paywalled Resource Test")]
-        public async void FetchPaywalledResourceTest()
-        {
-            tradingContractClient = GetComponent<ArcTradingContractClient>();
-            rpcUrl = tradingContractClient.RpcUrl;
-            gatewayReadOnlyWeb3 = new Web3(rpcUrl);
-
-            await ApproveIfNeededThenGatewayDepositAsync(1); // deposit 1 usdc into gateway
-
-            var content = await FetchPaywalledResourceAsync(
-                x402ServerUrl,
-                tradingContractClient.PrivateKey,
-                Erc20UsdcHelper.ParseUsdc(0.5m));
-            Debug.Log($"Fetched content: {content}");
-        }
+        // [ContextMenu("Fetch Paywalled Resource Test")]
+        // public async void FetchPaywalledResourceTest()
+        // {
+        //     tradingContractClient = GetComponent<ArcTradingContractClient>();
+        //     rpcUrl = tradingContractClient.RpcUrl;
+        //     gatewayReadOnlyWeb3 = new Web3(rpcUrl);
+        //
+        //     await ApproveIfNeededThenGatewayDepositAsync(1); // deposit 1 usdc into gateway
+        //
+        //     var content = await FetchPaywalledResourceAsync(
+        //         x402ServerBaseUrl,
+        //         tradingContractClient.PrivateKey,
+        //         Erc20UsdcHelper.ParseUsdc(0.5m));
+        //     Debug.Log($"Fetched content: {content}");
+        // }
         
         public async Task<string> FetchPaywalledResourceAsync(
             string url,

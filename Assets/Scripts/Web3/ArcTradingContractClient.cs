@@ -13,7 +13,7 @@ public class ArcTradingContractClient : MonoBehaviour
     [SerializeField] private string rpcUrl = "https://rpc.testnet.arc.network";
     public string RpcUrl => rpcUrl;
     // GamePayment contract address
-    [SerializeField] private string contractAddress = "0x7ED6f087be33A7218Fa8F3EDccC510ec8eC4fFd6";
+    [SerializeField] private string contractAddress = "0x505e788dC7e8B912a580F53250a4C79A40283e22";
     public string ContractAddress => contractAddress;
     [SerializeField] private string privateKey;
     [SerializeField] private float initialUsdcCapital = 0.5f;
@@ -41,8 +41,11 @@ public class ArcTradingContractClient : MonoBehaviour
     private ulong  cachedTraderKeyVersion;
 
     private const string Abi = @"[
-      {""inputs"":[{""internalType"":""address"",""name"":""_usdc"",""type"":""address""},{""internalType"":""address"",""name"":""_items"",""type"":""address""}],""stateMutability"":""nonpayable"",""type"":""constructor""},
-      {""inputs"":[],""name"":""MINT_PRICE"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""_usdc"",""type"":""address""},{""internalType"":""address"",""name"":""_items"",""type"":""address""},{""internalType"":""address"",""name"":""_gateway"",""type"":""address""}],""stateMutability"":""nonpayable"",""type"":""constructor""},
+      {""inputs"":[],""name"":""BASELINE_PRICE"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""PRICE_SLOPE"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""SELL_SPREAD_BPS"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""BPS_DENOMINATOR"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""NUM_TYPES"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""usdc"",""outputs"":[{""internalType"":""contract IERC20"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""items"",""outputs"":[{""internalType"":""address"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
@@ -52,9 +55,11 @@ public class ArcTradingContractClient : MonoBehaviour
       {""inputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""name"":""circulatingSupply"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""activeTypeCount"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[{""internalType"":""address"",""name"":""newOwner"",""type"":""address""}],""name"":""transferOwnership"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
-      {""inputs"":[],""name"":""mintRandom"",""outputs"":[{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""}],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""maxPriceAllowed"",""type"":""uint256""}],""name"":""mintRandom"",""outputs"":[{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""}],""stateMutability"":""nonpayable"",""type"":""function""},
       {""inputs"":[{""internalType"":""address"",""name"":""to"",""type"":""address""}],""name"":""mintRandomX402"",""outputs"":[{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""}],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""to"",""type"":""address""},{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""},{""internalType"":""uint256"",""name"":""paidAmount"",""type"":""uint256""},{""internalType"":""uint256"",""name"":""maxPriceAllowed"",""type"":""uint256""}],""name"":""buyItemX402"",""outputs"":[{""internalType"":""uint256"",""name"":""price"",""type"":""uint256""}],""stateMutability"":""nonpayable"",""type"":""function""},
       {""inputs"":[{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""}],""name"":""sellItem"",""outputs"":[{""internalType"":""uint256"",""name"":""price"",""type"":""uint256""}],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""}],""name"":""getBuyPrice"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""}],""name"":""getSellPrice"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""getContractBalance"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[{""internalType"":""address"",""name"":""_gateway"",""type"":""address""}],""name"":""setGateway"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
@@ -254,12 +259,56 @@ public class ArcTradingContractClient : MonoBehaviour
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         return await contract.GetFunction("activeTypeCount").CallAsync<BigInteger>();
     }
-
+    
     public async Task<decimal> GetMintPriceUSDCAsync()
     {
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
-        var price = await contract.GetFunction("MINT_PRICE").CallAsync<BigInteger>();
+        var price = await contract.GetFunction("BASELINE_PRICE").CallAsync<BigInteger>();
         return FromUsdc(price);
+    }
+
+    public async Task<decimal> GetBuyPriceUSDCAsync(BigInteger itemId)
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var price = await contract.GetFunction("getBuyPrice").CallAsync<BigInteger>(itemId);
+        return FromUsdc(price);
+    }
+
+    public async Task<decimal[]> GetAllBuyPricesUSDCAsync()
+    {
+        var ids = await GetItemIdsAsync();
+        var prices = new decimal[ids.Length];
+        for (int i = 0; i < ids.Length; i++)
+            prices[i] = await GetBuyPriceUSDCAsync(ids[i]);
+        return prices;
+    }
+
+    /// <summary>
+    /// Average buy price across the 5 NFT types — the expected cost of an on-chain
+    /// mintRandom() call (which picks one id uniformly at random). NPC DecideTrade
+    /// uses this as the dynamic mint-price anchor in the profitRatio formula.
+    /// </summary>
+    public async Task<decimal> GetAvgBuyPriceUSDCAsync()
+    {
+        var prices = await GetAllBuyPricesUSDCAsync();
+        if (prices.Length == 0) return 0m;
+        decimal sum = 0m;
+        for (int i = 0; i < prices.Length; i++) sum += prices[i];
+        return sum / prices.Length;
+    }
+    
+    public async Task<BigInteger> GetMaxBuyPriceAsync()
+    {
+        var ids = await GetItemIdsAsync();
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var fn = contract.GetFunction("getBuyPrice");
+        BigInteger max = BigInteger.Zero;
+        for (int i = 0; i < ids.Length; i++)
+        {
+            var p = await fn.CallAsync<BigInteger>(ids[i]);
+            if (p > max) max = p;
+        }
+        return max;
     }
 
     public async Task<BigInteger> GetNftBalanceAsync(string account, BigInteger itemId)
@@ -463,7 +512,7 @@ public class ArcTradingContractClient : MonoBehaviour
         return FromUsdc(balance);
     }
     
-    public async Task<string> MintRandomAsync(bool nanopayment = false)
+    public async Task<string> MintRandomAsync(BigInteger itemIdToBeMinted, bool nanopayment = false)
     {
         if (nanopayment)
         {
@@ -480,14 +529,14 @@ public class ArcTradingContractClient : MonoBehaviour
             
             var effectiveAvailableUsdc = await GetGatewayAvailableBalanceUSDCAsync();
             if (effectiveAvailableUsdc < capUsdc)
-                await arcNanopayment.ApproveIfNeededThenGatewayDepositAsync(0.5m);
+                await arcNanopayment.ApproveIfNeededThenGatewayDepositAsync((decimal)arcNanopayment.maxNanopaymentUsdc);
 
             if (string.IsNullOrWhiteSpace(tbaAddress))
                 throw new InvalidOperationException(
                     $"{name}: tbaAddress is empty — set the NPC's ERC6551 TBA in the Inspector before running the nanopayment mint path; the server validates and refuses to mint without it.");
-
+            
             var content = await arcNanopayment.FetchPaywalledResourceAsync(
-                arcNanopayment.x402ServerUrl,
+                arcNanopayment.x402ServerBaseUrl + itemIdToBeMinted,
                 NftTokenId,
                 npcPaymentWalletService,
                 nanopaymentCap,
@@ -497,18 +546,16 @@ public class ArcTradingContractClient : MonoBehaviour
         }
 
         var web3 = await CreateSignedWeb3Async();
-        var mintPrice = await readOnlyWeb3.Eth.GetContract(Abi, contractAddress)
-            .GetFunction("MINT_PRICE").CallAsync<BigInteger>();
-
-        // allowance
-        await Erc20UsdcHelper.EnsureApprovalAsync(web3, contractAddress, mintPrice);
+        
+        var maxBuyPrice = await GetMaxBuyPriceAsync();
+        await Erc20UsdcHelper.EnsureApprovalAsync(web3, contractAddress, maxBuyPrice);
 
         var contract = web3.Eth.GetContract(Abi, contractAddress);
         var fn = contract.GetFunction("mintRandom");
         var gas = new HexBigInteger(300000);
 
         return await fn.SendTransactionAsync(
-            web3.TransactionManager.Account.Address, gas, null);
+            web3.TransactionManager.Account.Address, gas, null, maxBuyPrice);
     }
     
     /// <summary>

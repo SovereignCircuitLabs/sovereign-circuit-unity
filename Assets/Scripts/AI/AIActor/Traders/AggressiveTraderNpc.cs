@@ -2,9 +2,8 @@ using UnityEngine;
 
 public class AggressiveTraderNpc : TradingNpcActor
 {
-    private const float MintPriceUSDC = 0.1f;
     private const float MinProfitMultiplier = 1.1f;
-    
+
     protected override void ConfigurePortfolio()
     {
         archetype = TradingNpcArchetype.AggressiveSpeculator;
@@ -18,17 +17,17 @@ public class AggressiveTraderNpc : TradingNpcActor
 
     protected override TradeDecision DecideTrade()
     {
+        float mintPrice = portfolioState.avgBuyPriceUSDC;
         float sellPrice = portfolioState.bestSellPriceUSDC;
-        float profitRatio = sellPrice / MintPriceUSDC;
+        float profitRatio = mintPrice > 0f ? sellPrice / mintPrice : 0f;
 
         bool hasItem = portfolioState.nftInventoryCount > 0;
-        bool canMint = portfolioState.walletUSDC >= MintPriceUSDC;
+        bool canMint = mintPrice > 0f && portfolioState.walletUSDC >= mintPrice;
 
         if (hasItem && profitRatio >= MinProfitMultiplier)
         {
             return BuildDecision(
-                TradeIntent.Withdraw,
-                1.2f,
+                TradeIntent.SellNFT,
                 $"Aggressive fast exit: capturing spread at {sellPrice:F4} USDC, ratio {profitRatio:F2}x."
             );
         }
@@ -36,18 +35,16 @@ public class AggressiveTraderNpc : TradingNpcActor
         if (canMint && profitRatio >= MinProfitMultiplier)
         {
             return BuildDecision(
-                TradeIntent.Deposit,
-                1.5f,
-                $"Aggressive arbitrage entry: minting against profitable buyback spread, ratio {profitRatio:F2}x."
+                TradeIntent.BuyNFT,
+                $"Aggressive arbitrage entry: avg mint {mintPrice:F4} vs best sell {sellPrice:F4}, ratio {profitRatio:F2}x."
             );
         }
 
         if (canMint && Random.value < 0.10f)
         {
             return BuildDecision(
-                TradeIntent.Deposit,
-                0.6f,
-                "Aggressive exploration: small speculative mint despite weak spread."
+                TradeIntent.BuyNFT,
+                $"Aggressive exploration: small speculative mint at avg {mintPrice:F4} despite weak spread."
             );
         }
 

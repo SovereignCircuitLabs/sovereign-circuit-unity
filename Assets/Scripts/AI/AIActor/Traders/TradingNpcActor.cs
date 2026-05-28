@@ -330,10 +330,9 @@ public abstract class TradingNpcActor : AIActor
             await RefreshBalancesAsync();
 
             TradeDecision decision = DecideTrade();
-            float amount = Mathf.Clamp(decision.amountUSDC, portfolioConfig.minTradeUSDC, portfolioConfig.maxTradeUSDC);
-            amount = Mathf.Min(amount, portfolioState.tradingBudgetUSDC);
+            float amount = 0.0f;
 
-            if (decision.intent == TradeIntent.Hold || amount < portfolioConfig.minTradeUSDC)
+            if (decision.intent == TradeIntent.Hold)
             {
                 currentActivity = $"Holding: {decision.reason}";
                 AddActivity(TradingNpcActivityType.TradeHold, "Trade hold", decision.reason);
@@ -344,30 +343,27 @@ public abstract class TradingNpcActor : AIActor
             string txResult = null;
             string txHash = null;
             TradingNpcActivityType activityType = TradingNpcActivityType.TradeHold;
-            if (decision.intent == TradeIntent.Deposit)
+            if (decision.intent == TradeIntent.BuyNFT)
             {
-                // Deposit intent → mintRandom: trade USDC (or x402 authorization) for one random NFT.
-                // Amount is fixed at MINT_PRICE per call regardless of decision.amountUSDC (temporarily?)
-                var mintPrice = (float)await contractClient.GetMintPriceUSDCAsync();
+                // Deposit intent → mintRandom: trade USDC (or x402 authorization) for one random NFT
+                int itemIdToBeMinted = UnityEngine.Random.Range(1, 6);
+                var mintPrice = (float)await contractClient.GetBuyPriceUSDCAsync(itemIdToBeMinted);
                 if (portfolioState.walletUSDC - portfolioState.reserveBudgetUSDC < mintPrice)
                 {
                     return;
                 }
 
                 amount = mintPrice;
-
-                txResult = await contractClient.MintRandomAsync(useNanopayment);
+                txResult = await contractClient.MintRandomAsync(itemIdToBeMinted, useNanopayment);
                 txHash = useNanopayment ? ExtractX402Tx(txResult) : txResult;
 
                 activityType = useNanopayment
                     ? TradingNpcActivityType.TradeDepositNanopayment
                     : TradingNpcActivityType.TradeDeposit;
             }
-            else if (decision.intent == TradeIntent.Withdraw)
+            else if (decision.intent == TradeIntent.SellNFT)
             {
-                // Withdraw intent → sellItem: sell one NFT the NPC owns back to the contract.
-                // Inventory lives on the TBA (x402 mint route), so look there — same address
-                // used for nftInventoryCount / vaultUSDC in RefreshBalancesAsync.
+                // Withdraw intent → sellItem: sell one NFT the NPC owns back to the contract
                 var inventoryAddress = !string.IsNullOrWhiteSpace(contractClient.TbaAddress)
                     ? contractClient.TbaAddress
                     : contractClient.WalletAddress;
@@ -405,13 +401,11 @@ public abstract class TradingNpcActor : AIActor
         });
     }
 
-    protected TradeDecision BuildDecision(TradeIntent intent, float riskMultiplier, string reason)
+    protected TradeDecision BuildDecision(TradeIntent intent, string reason)
     {
-        float baseAmount = UnityEngine.Random.Range(portfolioConfig.minTradeUSDC, portfolioConfig.maxTradeUSDC);
         return new TradeDecision
         {
             intent = intent,
-            amountUSDC = baseAmount * Mathf.Max(0.1f, riskMultiplier),
             reason = reason
         };
     }
@@ -475,10 +469,12 @@ public abstract class TradingNpcActor : AIActor
             ? (float)await contractClient.GetWalletBalanceUSDCAsync(inventoryAddress)
             : 0f;
         portfolioState.walletUSDC = traderUsdc + tbaUsdc;
+        
         portfolioState.vaultUSDC = (float)await contractClient.GetVaultBalanceUSDCAsync(inventoryAddress);
         portfolioState.gatewayUSDC = (float)await contractClient.GetGatewayAvailableBalanceUSDCAsync();
         portfolioState.nftInventoryCount = await contractClient.GetNftInventoryCountAsync(inventoryAddress);
         portfolioState.bestSellPriceUSDC = (float)await contractClient.GetBestSellPriceUSDCAsync();
+        portfolioState.avgBuyPriceUSDC = (float)await contractClient.GetAvgBuyPriceUSDCAsync();
     }
 
     private void AllocateBudgetsFromBalances()
@@ -662,7 +658,7 @@ public abstract class TradingNpcActor : AIActor
             Field("Config", "maxTradeUSDC", "Maximum Trade Size", portfolioConfig.maxTradeUSDC,
                 "Largest on-chain trade amount this NPC will attempt."),
             Field("State", "walletUSDC", "Wallet USDC", portfolioState.walletUSDC,
-                "USDC available in the NPC wallet(include payment wallet and TBA)."),
+                "USDC available in the NPC wallet (including payment wallet and TBA)."),
             Field("State", "vaultUSDC", "Vault USDC", portfolioState.vaultUSDC,
                 "USDC value of NFTs currently held in the vault (TBA)."),
             Field("State", "gatewayUSDC", "Gateway USDC", portfolioState.gatewayUSDC,
