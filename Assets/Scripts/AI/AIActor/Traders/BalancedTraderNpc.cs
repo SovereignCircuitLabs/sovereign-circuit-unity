@@ -2,9 +2,8 @@ using UnityEngine;
 
 public class BalancedTraderNpc : TradingNpcActor
 {
-    private const float MintPriceUSDC = 0.1f;
     private const float MinProfitMultiplier = 1.3f;
-    
+
     protected override void ConfigurePortfolio()
     {
         archetype = TradingNpcArchetype.BalancedTrader;
@@ -18,27 +17,26 @@ public class BalancedTraderNpc : TradingNpcActor
 
     protected override TradeDecision DecideTrade()
     {
+        float mintPrice = portfolioState.avgBuyPriceUSDC;
         float sellPrice = portfolioState.bestSellPriceUSDC;
-        float profitRatio = sellPrice / MintPriceUSDC;
+        float profitRatio = mintPrice > 0f ? sellPrice / mintPrice : 0f;
 
         bool hasItem = portfolioState.nftInventoryCount > 0;
-        bool canMint = portfolioState.walletUSDC >= MintPriceUSDC;
+        bool canMint = mintPrice > 0f && portfolioState.walletUSDC >= mintPrice;
 
         if (hasItem && profitRatio >= MinProfitMultiplier)
         {
             return BuildDecision(
-                TradeIntent.Withdraw,
-                0.9f,
-                $"Balanced arbitrage exit: selling NFT into favorable buyback price {sellPrice:F4} USDC."
+                TradeIntent.SellNFT,
+                $"Balanced arbitrage exit: selling NFT into favorable buyback price {sellPrice:F4} USDC, ratio {profitRatio:F2}x."
             );
         }
 
         if (canMint && profitRatio >= MinProfitMultiplier)
         {
             return BuildDecision(
-                TradeIntent.Deposit,
-                1.0f,
-                $"Balanced arbitrage entry: mint cost {MintPriceUSDC:F4}, sell price {sellPrice:F4}, ratio {profitRatio:F2}x."
+                TradeIntent.BuyNFT,
+                $"Balanced arbitrage entry: avg mint cost {mintPrice:F4}, sell price {sellPrice:F4}, ratio {profitRatio:F2}x."
             );
         }
 

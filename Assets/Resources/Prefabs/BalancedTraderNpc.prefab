@@ -756,12 +756,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  contractAddress: 0x7ED6f087be33A7218Fa8F3EDccC510ec8eC4fFd6
+  contractAddress: 0x505e788dC7e8B912a580F53250a4C79A40283e22
   privateKey: 
-  initialUsdcCapital: 5
+  initialUsdcCapital: 7
   nftTokenId: 2
   npcPaymentWalletService: {fileID: 0}
-  tbaAddress: 0xaF6daff07b3603f696A77FD43F6428D0632AE127
+  tbaAddress: 0x90aB367C7AD7d3d4B86E8f4C996f9733609DafDb
   useBoundWalletAsTrader: 1
 --- !u!114 &4129621925378898866
 MonoBehaviour:
@@ -775,8 +775,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ade8ba009ed9b9240ae65de4db56ad55, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  x402ServerUrl: http://localhost:4021/risk-profile
-  maxNanopaymentUsdc: 0.5
+  x402ServerBaseUrl: http://localhost:4021/item/
+  maxNanopaymentUsdc: 5
   fallbackChainId: 5042002
   httpTimeoutSeconds: 20
   verboseLogging: 0
@@ -803,8 +803,8 @@ MonoBehaviour:
     minimumReserveBudgetUSDC: 0.05
     rebalanceInterval: 20
     chainActionCooldown: 8
-    minTradeUSDC: 0.005
-    maxTradeUSDC: 0.05
+    minTradeUSDC: 0.03
+    maxTradeUSDC: 5.5
   portfolioState:
     walletUSDC: 0
     vaultUSDC: 0
@@ -814,6 +814,7 @@ MonoBehaviour:
     tradingBudgetUSDC: 0
     nftInventoryCount: 0
     bestSellPriceUSDC: 0
+    avgBuyPriceUSDC: 0
   useNanopayment: 1
   marketPoint: {fileID: 0}
   shopPoint: {fileID: 0}

@@ -12,8 +12,8 @@ public enum TradingNpcArchetype
 public enum TradeIntent
 {
     Hold,
-    Deposit,
-    Withdraw
+    BuyNFT,
+    SellNFT
 }
 
 [Serializable]
@@ -31,8 +31,8 @@ public class NpcPortfolioConfig
     public float chainActionCooldown = 8f;
 
     [Header("Trade Size")]
-    public float minTradeUSDC = 0.005f;
-    public float maxTradeUSDC = 0.05f;
+    public float minTradeUSDC = 0.05f;
+    public float maxTradeUSDC = 5f;
 
     public static NpcPortfolioConfig CopyOf(NpcPortfolioConfig source)
     {
@@ -100,6 +100,10 @@ public class NpcPortfolioState
     /// <summary>GamePayment 当前 5 种 NFT 回收价里的最高值（市场信号）。NPC 用它对比 MintPrice 决定是否套利。</summary>
     public float bestSellPriceUSDC;
 
+    /// <summary>GamePayment 当前 5 种 NFT buyPrice 的平均值（bonding curve 动态）。代表 on-chain mintRandom 的期望成本，
+    /// 用作 DecideTrade 套利判断的动态基准 —— 取代旧版本里硬编码的 0.10 USDC MintPriceUSDC 常量。</summary>
+    public float avgBuyPriceUSDC;
+
     public float TotalUSDC
     {
         get { return walletUSDC + vaultUSDC + gatewayUSDC; }
@@ -109,11 +113,10 @@ public class NpcPortfolioState
 public struct TradeDecision
 {
     public TradeIntent intent;
-    public float amountUSDC;
     public string reason;
 
     public static TradeDecision Hold(string reason)
     {
-        return new TradeDecision { intent = TradeIntent.Hold, amountUSDC = 0f, reason = reason };
+        return new TradeDecision { intent = TradeIntent.Hold, reason = reason };
     }
 }
