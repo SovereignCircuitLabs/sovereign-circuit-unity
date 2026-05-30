@@ -3,12 +3,6 @@ using UnityEngine;
 
 namespace ArcTrading.MacroAgent
 {
-    /// <summary>
-    /// Translates a validated macro policy into world-event state.
-    /// The applier NEVER touches NPC private keys, contract calls, or asset balances directly —
-    /// it only flips event activation and rewrites the multipliers consumed by the deterministic
-    /// C# logic in TradingNpcActor/WorldEventManager.
-    /// </summary>
     public class MacroPolicyApplier
     {
         private readonly Dictionary<WorldEventType, WorldEventConfigModifier> baselineModifiers

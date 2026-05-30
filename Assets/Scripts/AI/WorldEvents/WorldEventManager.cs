@@ -172,6 +172,40 @@ public class WorldEventManager : Singleton<WorldEventManager>
         ActiveEventsChanged?.Invoke(GetActiveEvents());
     }
 
+    public float GetCurrentEventsGlobalRiskMultiplier()
+    {
+        float multiplier = 1f;
+        for (int i = 0; i < eventDefinitions.Count; i++)
+        {
+            WorldEventDefinition definition = eventDefinitions[i];
+            if (definition == null || definition.modifier == null || !activeEventTypes.Contains(definition.type))
+            {
+                continue;
+            }
+
+            multiplier *= definition.modifier.globalRiskMultiplier;
+        }
+
+        return Mathf.Max(0f, multiplier);
+    }
+
+    public float GetCurrentEventsBonus()
+    {
+        float bonus = 0f;
+        for (int i = 0; i < eventDefinitions.Count; i++)
+        {
+            WorldEventDefinition definition = eventDefinitions[i];
+            if (definition == null || definition.modifier == null || !activeEventTypes.Contains(definition.type))
+            {
+                continue;
+            }
+
+            bonus += definition.modifier.eventBonus;
+        }
+
+        return bonus;
+    }
+
     private bool TryGetDefinition(WorldEventType type, out WorldEventDefinition definition)
     {
         EnsureDefaultDefinitions();
@@ -202,7 +236,8 @@ public class WorldEventManager : Singleton<WorldEventManager>
             1.25f, 1.10f, 0.75f,
             1.50f, 1.10f,
             1.15f, 1.15f,
-            0.90f, 0.80f);
+            0.90f, 0.80f,
+            0.95f, -0.005f);
 
         AddDefaultDefinition(
             WorldEventType.Inflation,
@@ -211,7 +246,8 @@ public class WorldEventManager : Singleton<WorldEventManager>
             1.35f, 0.95f, 0.85f,
             1.60f, 1.15f,
             0.90f, 0.90f,
-            1.20f, 1.20f);
+            1.20f, 1.20f,
+            1.08f, 0.01f);
 
         AddDefaultDefinition(
             WorldEventType.MarketBoom,
@@ -220,7 +256,8 @@ public class WorldEventManager : Singleton<WorldEventManager>
             0.90f, 0.75f, 1.40f,
             0.90f, 0.85f,
             0.80f, 0.75f,
-            1.10f, 1.25f);
+            1.10f, 1.25f,
+            1.15f, 0.02f);
 
         AddDefaultDefinition(
             WorldEventType.LiquidityCrunch,
@@ -229,7 +266,8 @@ public class WorldEventManager : Singleton<WorldEventManager>
             1.05f, 1.40f, 0.70f,
             1.10f, 1.50f,
             1.30f, 1.40f,
-            0.80f, 0.65f);
+            0.80f, 0.65f,
+            0.85f, -0.015f);
     }
 
     private void AddDefaultDefinition(
@@ -244,7 +282,9 @@ public class WorldEventManager : Singleton<WorldEventManager>
         float rebalanceInterval,
         float chainCooldown,
         float minTrade,
-        float maxTrade)
+        float maxTrade,
+        float globalRiskMultiplier,
+        float eventBonus)
     {
         if (HasDefinition(type))
         {
@@ -266,7 +306,9 @@ public class WorldEventManager : Singleton<WorldEventManager>
                 rebalanceIntervalMultiplier = rebalanceInterval,
                 chainActionCooldownMultiplier = chainCooldown,
                 minTradeMultiplier = minTrade,
-                maxTradeMultiplier = maxTrade
+                maxTradeMultiplier = maxTrade,
+                globalRiskMultiplier = globalRiskMultiplier,
+                eventBonus = eventBonus
             }
         });
     }

@@ -10,8 +10,8 @@ public class AggressiveTraderNpc : TradingNpcActor
         portfolioConfig.livingNeedsWeight = 0.20f;
         portfolioConfig.reserveWeight = 0.15f;
         portfolioConfig.tradingWeight = 0.65f;
-        portfolioConfig.minTradeUSDC = 0.01f;
-        portfolioConfig.maxTradeUSDC = 0.08f;
+        portfolioConfig.minTradeUSDC = 0.05f;
+        portfolioConfig.maxTradeUSDC = 6.5f;
         portfolioConfig.chainActionCooldown = 5f;
     }
 
@@ -19,7 +19,13 @@ public class AggressiveTraderNpc : TradingNpcActor
     {
         float mintPrice = portfolioState.avgBuyPriceUSDC;
         float sellPrice = portfolioState.bestSellPriceUSDC;
-        float profitRatio = mintPrice > 0f ? sellPrice / mintPrice : 0f;
+        // float profitRatio = mintPrice > 0f ? sellPrice / mintPrice : 0f;
+        
+        WorldEventManager eventManager = WorldEventManager.GetOrCreate();
+        float globalRiskMultiplier = eventManager.GetCurrentEventsGlobalRiskMultiplier();
+        float eventBonus = eventManager.GetCurrentEventsBonus();
+        float expectedAssetValue = sellPrice * globalRiskMultiplier + eventBonus;
+        float profitRatio = mintPrice > 0f ? expectedAssetValue / mintPrice : 0f;
 
         bool hasItem = portfolioState.nftInventoryCount > 0;
         bool canMint = mintPrice > 0f && portfolioState.walletUSDC >= mintPrice;

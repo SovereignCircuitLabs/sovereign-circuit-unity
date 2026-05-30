@@ -10,8 +10,8 @@ public class BalancedTraderNpc : TradingNpcActor
         portfolioConfig.livingNeedsWeight = 0.30f;
         portfolioConfig.reserveWeight = 0.30f;
         portfolioConfig.tradingWeight = 0.40f;
-        portfolioConfig.minTradeUSDC = 0.005f;
-        portfolioConfig.maxTradeUSDC = 0.04f;
+        portfolioConfig.minTradeUSDC = 0.03f;
+        portfolioConfig.maxTradeUSDC = 5.5f;
         portfolioConfig.chainActionCooldown = 8f;
     }
 
@@ -19,7 +19,13 @@ public class BalancedTraderNpc : TradingNpcActor
     {
         float mintPrice = portfolioState.avgBuyPriceUSDC;
         float sellPrice = portfolioState.bestSellPriceUSDC;
-        float profitRatio = mintPrice > 0f ? sellPrice / mintPrice : 0f;
+        // float profitRatio = mintPrice > 0f ? sellPrice / mintPrice : 0f;
+        
+        WorldEventManager eventManager = WorldEventManager.GetOrCreate();
+        float globalRiskMultiplier = eventManager.GetCurrentEventsGlobalRiskMultiplier();
+        float eventBonus = eventManager.GetCurrentEventsBonus();
+        float expectedAssetValue = sellPrice * globalRiskMultiplier + eventBonus;
+        float profitRatio = mintPrice > 0f ? expectedAssetValue / mintPrice : 0f;
 
         bool hasItem = portfolioState.nftInventoryCount > 0;
         bool canMint = mintPrice > 0f && portfolioState.walletUSDC >= mintPrice;
