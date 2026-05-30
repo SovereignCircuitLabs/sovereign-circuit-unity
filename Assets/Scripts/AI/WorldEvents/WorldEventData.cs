@@ -29,6 +29,10 @@ public class WorldEventConfigModifier
     public float minTradeMultiplier = 1f;
     public float maxTradeMultiplier = 1f;
 
+    [Header("Trader Expectation Adjustments")]
+    public float globalRiskMultiplier = 1f;
+    public float eventBonus = 0f;
+
     public void ApplyTo(NpcPortfolioConfig config)
     {
         if (config == null)
