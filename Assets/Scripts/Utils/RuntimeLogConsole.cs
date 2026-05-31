@@ -7,7 +7,7 @@ using UnityEngine.UI;
 [DisallowMultipleComponent]
 public class RuntimeLogConsole : MonoBehaviour
 {
-    private const int MaxEntries = 120;
+    private const int MaxEntries = 100;
     private const int MaxRenderedCharacters = 18000;
     private const int MaxMessageLength = 180;
 
@@ -103,8 +103,8 @@ public class RuntimeLogConsole : MonoBehaviour
         panelRect.anchorMin = new Vector2(1f, 1f);
         panelRect.anchorMax = new Vector2(1f, 1f);
         panelRect.pivot = new Vector2(1f, 1f);
-        panelRect.anchoredPosition = new Vector2(-18f, -18f);
-        panelRect.sizeDelta = new Vector2(620f, 280f);
+        panelRect.anchoredPosition = new Vector2(-5f, -3.5f);
+        panelRect.sizeDelta = new Vector2(620f, 250f);
 
         GameObject viewportObject = new GameObject("Viewport");
         viewportObject.transform.SetParent(panelObject.transform, false);
