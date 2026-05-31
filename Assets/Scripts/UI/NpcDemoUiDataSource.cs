@@ -46,6 +46,7 @@ public class NpcDemoUiDataSource : MonoBehaviour
         if (followSelectedNpc && selectedNpc != null && followCamera != null)
         {
             Vector3 targetPosition = selectedNpc.transform.position + followOffset;
+            FadeObjectBlockingObject.Instance.TargetTransform = selectedNpc.transform;
             followCamera.transform.position = Vector3.Lerp(
                 followCamera.transform.position,
                 targetPosition,

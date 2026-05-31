@@ -417,8 +417,8 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 1.53, y: 0.7, z: -4.2}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalScale: {x: 1.2, y: 1.2, z: 1.2}
+  m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 975234232013651045}
   - {fileID: 6972290943461755946}
@@ -493,10 +493,10 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.27484572
-  m_Height: 1.8145835
+  m_Radius: 0.14
+  m_Height: 1.35
   m_Direction: 1
-  m_Center: {x: 0.02, y: 0.8713604, z: 0}
+  m_Center: {x: 0.01, y: 0.67044324, z: 0}
 --- !u!114 &9215966450908659434
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -573,7 +573,7 @@ MonoBehaviour:
   marketPoint: {fileID: 0}
   shopPoint: {fileID: 0}
   homePoint: {fileID: 0}
-  arriveHeight: 0.5
+  arriveHeight: 0.3
 --- !u!114 &5461816793476226999
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -589,9 +589,9 @@ MonoBehaviour:
   maxVelocity: 10
   maxAcceleration: 15
   turnSpeed: 30
-  targetRadius: 0.05
-  slowRadius: 1
-  timeToTarget: 0.1
+  targetRadius: 0.7
+  slowRadius: 5
+  timeToTarget: 0.5
 --- !u!114 &3004487303847187544
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -620,8 +620,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d2fd706e88674bd5b57d3b5a4bda7f9b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rayStart: 0.5
-  rayLength: 10
+  rayStart: 0.1
+  rayHeight: 0.2
+  rayLength: 15
   rayCount: 36
   collisionLayers:
     serializedVersion: 2
