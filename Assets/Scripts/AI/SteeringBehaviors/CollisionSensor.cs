@@ -4,6 +4,7 @@
 public class CollisionSensor : MonoBehaviour
 {
     public float rayStart = 0.5f;
+    public float rayHeight = 1f;
     public float rayLength = 10f;
     public int rayCount = 36;
     public LayerMask collisionLayers;
@@ -54,16 +55,19 @@ public class CollisionSensor : MonoBehaviour
 
             bool collision = false;
             RaycastHit hit;
-            collision = Physics.Raycast(transform.position + direction * rayStart, direction, out hit, rayLength,
+            collision = Physics.Raycast(transform.position + direction * rayStart + new Vector3(0, rayHeight, 0),
+                direction, out hit, rayLength,
                 collisionLayers);
 
             if (collision)
             {
-                Debug.DrawRay(transform.position + direction * rayStart, direction * hit.distance, Color.red);
+                Debug.DrawRay(transform.position + direction * rayStart + new Vector3(0, rayHeight, 0),
+                    direction * hit.distance, Color.red);
             }
             else // No collision
             {
-                Debug.DrawRay(transform.position + direction * rayStart, direction * rayLength, Color.green);
+                Debug.DrawRay(transform.position + direction * rayStart + new Vector3(0, rayHeight, 0),
+                    direction * rayLength, Color.green);
                 result = direction;
                 break;
             }
