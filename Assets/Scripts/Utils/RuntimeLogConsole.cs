@@ -7,15 +7,21 @@ using UnityEngine.UI;
 [DisallowMultipleComponent]
 public class RuntimeLogConsole : MonoBehaviour
 {
-    private const int MaxEntries = 100;
-    private const int MaxRenderedCharacters = 18000;
-    private const int MaxMessageLength = 180;
+    private const int MaxEntries = 150;
+    private const int MaxRenderedCharacters = 22000;
+    private const int MaxMessageLength = 320;
 
     private static readonly Color PanelColor = new Color(0f, 0f, 0f, 0.68f);
     private static readonly Color HandleColor = new Color(1f, 1f, 1f, 0.22f);
     private static readonly Color DefaultColor = new Color(0.86f, 0.9f, 0.96f);
     private static readonly Color WarningColor = new Color(1f, 0.78f, 0.32f);
     private static readonly Color ErrorColor = new Color(1f, 0.32f, 0.32f);
+    private static readonly Color PaymentBindColor = new Color(1f, 0.82f, 0.45f);    // gold — payment wallet binding
+    private static readonly Color NanopaymentColor = new Color(0.55f, 0.85f, 1f);    // cyan — x402 / nanopayment
+    private static readonly Color SellTradeColor = new Color(1f, 0.55f, 0.85f);      // pink — SellNFT / sellItem
+    private static readonly Color BuyTradeColor = new Color(0.55f, 1f, 0.78f);       // mint — BuyNFT / mintRandom
+    private static readonly Color MacroAgentColor = new Color(0.85f, 0.75f, 1f);     // lavender — MacroAgent
+    private static readonly Color WorldEventColor = new Color(1f, 0.65f, 0.55f);     // salmon — world events
 
     private readonly List<LogEntry> entries = new List<LogEntry>();
     private readonly StringBuilder builder = new StringBuilder(4096);
@@ -326,19 +332,79 @@ public class RuntimeLogConsole : MonoBehaviour
             return true;
         }
 
-        return message.Contains("initialized USDC portfolio")
+        // Trader portfolio lifecycle
+        if (message.Contains("initialized USDC portfolio")
             || message.Contains("rebalanced portfolio")
-            || message.Contains("Deposit")
-            || message.Contains("Withdraw")
             || message.Contains("bought living supplies")
             || message.Contains("holds:")
-            || message.Contains("tx:");
+            || message.Contains("tx=")
+            || message.Contains("tx:"))
+        {
+            return true;
+        }
+
+        // Trade intents (TradingNpcActor logs "{intent}{modeTag} {amount} USDC ...")
+        if (message.Contains("BuyNFT") || message.Contains("SellNFT")
+            || message.Contains("Deposit") || message.Contains("Withdraw")
+            || message.Contains("nanopayment"))
+        {
+            return true;
+        }
+
+        // Payment wallet binding (x402 operator wallet on NPC NFT)
+        if (message.Contains("payment wallet")
+            || message.Contains("Payment wallet")
+            || message.Contains("[NpcPaymentWalletService]")
+            || message.Contains("[NpcPaymentKeyVault]"))
+        {
+            return true;
+        }
+
+        // x402 / nanopayment runtime
+        if (message.Contains("[ArcNanopayment]"))
+        {
+            return true;
+        }
+
+        // ArcTrading contract client lifecycle (TBA, capital top-up, bound trader wallet)
+        if (message.Contains("Resolved TBA address")
+            || message.Contains("useBoundWalletAsTrader")
+            || message.Contains("initial capital")
+            || message.Contains("capital top-up")
+            || message.Contains("trader wallet"))
+        {
+            return true;
+        }
+
+        // Macro economy agent + world events
+        if (message.Contains("[MacroAgent]") || message.Contains("World event"))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static Color ResolveColor(string message, LogType type)
     {
         if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert) return ErrorColor;
         if (type == LogType.Warning) return WarningColor;
+
+        // Payment / nanopayment infra — surface these distinctly regardless of which NPC emits them
+        if (message.Contains("payment wallet") || message.Contains("Payment wallet")
+            || message.Contains("[NpcPaymentWalletService]") || message.Contains("[NpcPaymentKeyVault]"))
+        {
+            return PaymentBindColor;
+        }
+        if (message.Contains("[ArcNanopayment]") || message.Contains("nanopayment"))
+        {
+            return NanopaymentColor;
+        }
+        if (message.Contains("SellNFT") || message.Contains("Withdraw")) return SellTradeColor;
+        if (message.Contains("BuyNFT") || message.Contains("Deposit")) return BuyTradeColor;
+        if (message.Contains("[MacroAgent]")) return MacroAgentColor;
+        if (message.Contains("World event")) return WorldEventColor;
+
         if (message.Contains("Aggressive")) return new Color(1f, 0.38f, 0.36f);
         if (message.Contains("Balanced")) return new Color(0.25f, 0.78f, 1f);
         if (message.Contains("Conservative")) return new Color(0.45f, 0.95f, 0.55f);
