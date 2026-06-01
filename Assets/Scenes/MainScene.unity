@@ -647,7 +647,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  nftContractAddress: 0x10378F49C976C10E4dCCfD62F0372daD87cbc074
+  nftContractAddress: 0x5324033F69BA0D4DADdc07f00f44D2777CBc53Db
   nftOwnerPrivateKey: 0xc5153c66596cdc5ab9918202eb84ba91e2a553d89782d30be4eb32cc7bf270f1
 --- !u!114 &947144902
 MonoBehaviour:

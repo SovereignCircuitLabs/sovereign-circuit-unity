@@ -510,7 +510,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  contractAddress: 0x70121a6C38c1b5FC1C3FE5567beC9CfCb47fBC58
+  contractAddress: 0x8274AEC72E8c7Ac0eB411A23fCde8058Ad41E8ab
   privateKey: 
   initialUsdcCapital: 7
   nftTokenId: 3
@@ -572,7 +572,7 @@ MonoBehaviour:
   marketPoint: {fileID: 0}
   shopPoint: {fileID: 0}
   homePoint: {fileID: 0}
-  arriveHeight: 0.3
+  arriveHeight: 0.1
 --- !u!114 &5461816793476226999
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -585,12 +585,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 157a911d562344689f05ba76759fad05, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxVelocity: 10
-  maxAcceleration: 15
-  turnSpeed: 30
-  targetRadius: 0.7
-  slowRadius: 5
-  timeToTarget: 0.5
+  maxVelocity: 8
+  maxAcceleration: 12
+  turnSpeed: 25
+  targetRadius: 0.5
+  slowRadius: 1
+  timeToTarget: 0.1
 --- !u!114 &3004487303847187544
 MonoBehaviour:
   m_ObjectHideFlags: 0
