@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using ArcTrading.Nanopayment;
+using Nethereum.ABI.FunctionEncoding.Attributes;
 using Nethereum.Hex.HexConvertors.Extensions;
 using Nethereum.Hex.HexTypes;
 using Nethereum.Web3;
@@ -13,7 +15,7 @@ public class ArcTradingContractClient : MonoBehaviour
     [SerializeField] private string rpcUrl = "https://rpc.testnet.arc.network";
     public string RpcUrl => rpcUrl;
     // GamePayment contract address
-    [SerializeField] private string contractAddress = "0x505e788dC7e8B912a580F53250a4C79A40283e22";
+    [SerializeField] private string contractAddress = "0x70121a6C38c1b5FC1C3FE5567beC9CfCb47fBC58";
     public string ContractAddress => contractAddress;
     [SerializeField] private string privateKey;
     [SerializeField] private float initialUsdcCapital = 0.5f;
@@ -23,11 +25,11 @@ public class ArcTradingContractClient : MonoBehaviour
     [SerializeField] private ulong nftTokenId;
     [SerializeField] private NpcPaymentWalletService npcPaymentWalletService;
 
-    [Tooltip("ERC6551 token-bound account for this NPC NFT. The x402 server mints loot NFTs to this " +
-             "address (validating it on-chain), so the NPC's canonical TBA — not the operator wallet — " +
-             "holds the inventory.")]
-    [SerializeField] private string tbaAddress;
-    public string TbaAddress => tbaAddress;
+    // Resolved from chain via GamePayment.npcTba(tokenId) — see EnsureTbaAddressAsync.
+    // The x402 server mints loot NFTs to this address (validating it on-chain), so the NPC's
+    // canonical TBA — not the operator wallet — holds the inventory.
+    private string cachedTbaAddress;
+    public string TbaAddress => cachedTbaAddress ?? string.Empty;
 
     [Tooltip("If true, ignore the privateKey field above and lazy-resolve the trader signing key " +
              "from the on-chain bound payment wallet. Demo-friendly (no manual key creation) but " +
@@ -41,7 +43,7 @@ public class ArcTradingContractClient : MonoBehaviour
     private ulong  cachedTraderKeyVersion;
 
     private const string Abi = @"[
-      {""inputs"":[{""internalType"":""address"",""name"":""_usdc"",""type"":""address""},{""internalType"":""address"",""name"":""_items"",""type"":""address""},{""internalType"":""address"",""name"":""_gateway"",""type"":""address""}],""stateMutability"":""nonpayable"",""type"":""constructor""},
+      {""inputs"":[{""internalType"":""address"",""name"":""_usdc"",""type"":""address""},{""internalType"":""address"",""name"":""_items"",""type"":""address""},{""internalType"":""address"",""name"":""_gateway"",""type"":""address""},{""internalType"":""address"",""name"":""_manager"",""type"":""address""}],""stateMutability"":""nonpayable"",""type"":""constructor""},
       {""inputs"":[],""name"":""BASELINE_PRICE"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""PRICE_SLOPE"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""SELL_SPREAD_BPS"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
@@ -51,6 +53,7 @@ public class ArcTradingContractClient : MonoBehaviour
       {""inputs"":[],""name"":""items"",""outputs"":[{""internalType"":""address"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""owner"",""outputs"":[{""internalType"":""address"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""gateway"",""outputs"":[{""internalType"":""contract IGatewayWallet"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""tokenId"",""type"":""uint256""}],""name"":""npcTba"",""outputs"":[{""internalType"":""address"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""name"":""itemIds"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""name"":""circulatingSupply"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""activeTypeCount"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
@@ -75,7 +78,16 @@ public class ArcTradingContractClient : MonoBehaviour
       {""inputs"":[],""name"":""gatewayWithdrawalBlock"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[],""name"":""gatewayWithdrawalDelay"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[{""internalType"":""address"",""name"":""addr"",""type"":""address""}],""name"":""isGatewayAuthorized"",""outputs"":[{""internalType"":""bool"",""name"":"""",""type"":""bool""}],""stateMutability"":""view"",""type"":""function""},
-      {""inputs"":[],""name"":""isGatewayTokenSupported"",""outputs"":[{""internalType"":""bool"",""name"":"""",""type"":""bool""}],""stateMutability"":""view"",""type"":""function""}
+      {""inputs"":[],""name"":""isGatewayTokenSupported"",""outputs"":[{""internalType"":""bool"",""name"":"""",""type"":""bool""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""manager"",""outputs"":[{""internalType"":""contract Npc6551Manager"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""_manager"",""type"":""address""}],""name"":""setManager"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[],""name"":""getItemIds"",""outputs"":[{""internalType"":""uint256[5]"",""name"":"""",""type"":""uint256[5]""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""getAllBuyPrices"",""outputs"":[{""internalType"":""uint256[5]"",""name"":""prices"",""type"":""uint256[5]""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""getAllSellPrices"",""outputs"":[{""internalType"":""uint256[5]"",""name"":""prices"",""type"":""uint256[5]""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""tba"",""type"":""address""}],""name"":""getTbaItemBalances"",""outputs"":[{""internalType"":""uint256[5]"",""name"":""ids"",""type"":""uint256[5]""},{""internalType"":""uint256[5]"",""name"":""balances"",""type"":""uint256[5]""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""tba"",""type"":""address""}],""name"":""getTbaOwnedItems"",""outputs"":[{""internalType"":""uint256[]"",""name"":""ids"",""type"":""uint256[]""},{""internalType"":""uint256[]"",""name"":""balances"",""type"":""uint256[]""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""tokenId"",""type"":""uint256""}],""name"":""getNpcTbaItemBalances"",""outputs"":[{""internalType"":""address"",""name"":""tba"",""type"":""address""},{""internalType"":""uint256[5]"",""name"":""ids"",""type"":""uint256[5]""},{""internalType"":""uint256[5]"",""name"":""balances"",""type"":""uint256[5]""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""tokenId"",""type"":""uint256""}],""name"":""getNpcTbaOwnedItems"",""outputs"":[{""internalType"":""address"",""name"":""tba"",""type"":""address""},{""internalType"":""uint256[]"",""name"":""ids"",""type"":""uint256[]""},{""internalType"":""uint256[]"",""name"":""balances"",""type"":""uint256[]""}],""stateMutability"":""view"",""type"":""function""}
     ]";
 
     // Minimal ERC1155 ABI — only what we need to read NPC's GameItems inventory.
@@ -113,7 +125,26 @@ public class ArcTradingContractClient : MonoBehaviour
         if (npcPaymentWalletService == null || nftTokenId == 0) return null;
         var signer = await npcPaymentWalletService.EnsureBoundOrRebindAsync(NftTokenId);
         if (useBoundWalletAsTrader) CacheBoundSigner(signer);
+        await EnsureTbaAddressAsync();
         return signer;
+    }
+    
+    public async Task<string> EnsureTbaAddressAsync()
+    {
+        if (!string.IsNullOrEmpty(cachedTbaAddress)) return cachedTbaAddress;
+        if (nftTokenId == 0)
+            throw new InvalidOperationException(
+                $"{name}: nftTokenId is 0 — cannot resolve TBA on chain.");
+
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var tba = await contract.GetFunction("npcTba").CallAsync<string>(NftTokenId);
+        Debug.Log($"[{name}] Resolved TBA address {tba} for NPC tokenId {nftTokenId} via GamePayment.npcTba.");
+        if (string.IsNullOrWhiteSpace(tba) || IsZeroAddress(tba))
+            throw new InvalidOperationException(
+                $"{name}: GamePayment.npcTba({nftTokenId}) returned 0x0 — the contract's " +
+                "Npc6551Manager is not set or this tokenId has no deployed TBA.");
+        cachedTbaAddress = tba;
+        return cachedTbaAddress;
     }
 
     public void InvalidateBoundTraderCache()
@@ -130,8 +161,7 @@ public class ArcTradingContractClient : MonoBehaviour
         cachedTraderKeyVersion = signer.Version;
         if (firstResolve)
         {
-            Debug.Log($"[{name}] useBoundWalletAsTrader=true → trader wallet is {signer.Address}. " +
-                      "Fund this address with ARC (gas) + USDC before chain actions can succeed.");
+            Debug.Log($"[{name}] useBoundWalletAsTrader=true → trader wallet is {signer.Address}.");
         }
     }
 
@@ -152,27 +182,23 @@ public class ArcTradingContractClient : MonoBehaviour
 
     /// <summary>
     /// Vault value = NPC's NFT inventory(TBA) marked to the contract's buyback price,
-    /// i.e. Σ over the 5 managed item types of: balanceOf(npc, id) × getSellPrice(id).
+    /// i.e. Σ over the 5 managed item types of: balanceOf(tba, id) × getSellPrice(id).
     /// </summary>
     public async Task<decimal> GetVaultBalanceUSDCAsync(string account)
     {
-        var itemIds = await GetItemIdsAsync();
-        var itemsAddr = await GetItemsAddressAsync();
+        if (string.IsNullOrWhiteSpace(account)) return 0m;
 
-        var gamePayment = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
-        var sellPriceFn = gamePayment.GetFunction("getSellPrice");
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
 
-        var items = readOnlyWeb3.Eth.GetContract(Erc1155Abi, itemsAddr);
-        var balanceOfFn = items.GetFunction("balanceOf");
+        var balances = await contract.GetFunction("getTbaItemBalances")
+            .CallDeserializingToObjectAsync<GetTbaItemBalancesOutputDTO>(account);
+        var sellPrices = await contract.GetFunction("getAllSellPrices").CallAsync<List<BigInteger>>();
 
         BigInteger totalUnits = BigInteger.Zero;
-        for (int i = 0; i < itemIds.Length; i++)
+        for (int i = 0; i < balances.Balances.Count; i++)
         {
-            var id = itemIds[i];
-            var balance = await balanceOfFn.CallAsync<BigInteger>(account, id);
-            if (balance == BigInteger.Zero) continue;
-            var price = await sellPriceFn.CallAsync<BigInteger>(id);
-            totalUnits += balance * price;
+            if (balances.Balances[i] == BigInteger.Zero) continue;
+            totalUnits += balances.Balances[i] * sellPrices[i];
         }
         return FromUsdc(totalUnits);
     }
@@ -191,11 +217,8 @@ public class ArcTradingContractClient : MonoBehaviour
     {
         if (cachedItemIds != null) return cachedItemIds;
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
-        var fn = contract.GetFunction("itemIds");
-        var ids = new BigInteger[ItemTypeCount];
-        for (int i = 0; i < ItemTypeCount; i++)
-            ids[i] = await fn.CallAsync<BigInteger>(new BigInteger(i));
-        cachedItemIds = ids;
+        var ids = await contract.GetFunction("getItemIds").CallAsync<List<BigInteger>>();
+        cachedItemIds = ids.ToArray();
         return cachedItemIds;
     }
 
@@ -208,11 +231,25 @@ public class ArcTradingContractClient : MonoBehaviour
 
     public async Task<decimal[]> GetAllSellPricesUSDCAsync()
     {
-        var ids = await GetItemIdsAsync();
-        var prices = new decimal[ids.Length];
-        for (int i = 0; i < ids.Length; i++)
-            prices[i] = await GetSellPriceUSDCAsync(ids[i]);
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var raw = await contract.GetFunction("getAllSellPrices").CallAsync<List<BigInteger>>();
+        var prices = new decimal[raw.Count];
+        for (int i = 0; i < raw.Count; i++) prices[i] = FromUsdc(raw[i]);
         return prices;
+    }
+
+    public async Task<BigInteger[]> GetAllBuyPricesRawAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var raw = await contract.GetFunction("getAllBuyPrices").CallAsync<List<BigInteger>>();
+        return raw.ToArray();
+    }
+
+    public async Task<BigInteger[]> GetAllSellPricesRawAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var raw = await contract.GetFunction("getAllSellPrices").CallAsync<List<BigInteger>>();
+        return raw.ToArray();
     }
 
     /// <summary>
@@ -235,16 +272,11 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<int> GetNftInventoryCountAsync(string account)
     {
         if (string.IsNullOrWhiteSpace(account)) return 0;
-        var ids = await GetItemIdsAsync();
-        var itemsAddr = await GetItemsAddressAsync();
-        var items = readOnlyWeb3.Eth.GetContract(Erc1155Abi, itemsAddr);
-        var balanceOfFn = items.GetFunction("balanceOf");
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var dto = await contract.GetFunction("getTbaItemBalances")
+            .CallDeserializingToObjectAsync<GetTbaItemBalancesOutputDTO>(account);
         int total = 0;
-        for (int i = 0; i < ids.Length; i++)
-        {
-            var bal = await balanceOfFn.CallAsync<BigInteger>(account, ids[i]);
-            total += (int)bal;
-        }
+        for (int i = 0; i < dto.Balances.Count; i++) total += (int)dto.Balances[i];
         return total;
     }
 
@@ -276,10 +308,10 @@ public class ArcTradingContractClient : MonoBehaviour
 
     public async Task<decimal[]> GetAllBuyPricesUSDCAsync()
     {
-        var ids = await GetItemIdsAsync();
-        var prices = new decimal[ids.Length];
-        for (int i = 0; i < ids.Length; i++)
-            prices[i] = await GetBuyPriceUSDCAsync(ids[i]);
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var raw = await contract.GetFunction("getAllBuyPrices").CallAsync<List<BigInteger>>();
+        var prices = new decimal[raw.Count];
+        for (int i = 0; i < raw.Count; i++) prices[i] = FromUsdc(raw[i]);
         return prices;
     }
 
@@ -299,15 +331,10 @@ public class ArcTradingContractClient : MonoBehaviour
     
     public async Task<BigInteger> GetMaxBuyPriceAsync()
     {
-        var ids = await GetItemIdsAsync();
-        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
-        var fn = contract.GetFunction("getBuyPrice");
+        var raw = await GetAllBuyPricesRawAsync();
         BigInteger max = BigInteger.Zero;
-        for (int i = 0; i < ids.Length; i++)
-        {
-            var p = await fn.CallAsync<BigInteger>(ids[i]);
-            if (p > max) max = p;
-        }
+        for (int i = 0; i < raw.Length; i++)
+            if (raw[i] > max) max = raw[i];
         return max;
     }
 
@@ -321,19 +348,16 @@ public class ArcTradingContractClient : MonoBehaviour
     /// <summary>
     /// Returns the first item id where balanceOf(npc, id) > 0, or null if NPC owns nothing.
     /// Used by sellItem callers that don't care which type to sell.
+    /// Uses GamePayment.getTbaOwnedItems — the contract already filters to balances > 0.
     /// </summary>
     public async Task<BigInteger?> FindFirstOwnedItemIdAsync(string account)
     {
-        var ids = await GetItemIdsAsync();
-        var itemsAddr = await GetItemsAddressAsync();
-        var items = readOnlyWeb3.Eth.GetContract(Erc1155Abi, itemsAddr);
-        var balanceOfFn = items.GetFunction("balanceOf");
-        for (int i = 0; i < ids.Length; i++)
-        {
-            var bal = await balanceOfFn.CallAsync<BigInteger>(account, ids[i]);
-            if (bal > BigInteger.Zero) return ids[i];
-        }
-        return null;
+        if (string.IsNullOrWhiteSpace(account)) return null;
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        var dto = await contract.GetFunction("getTbaOwnedItems")
+            .CallDeserializingToObjectAsync<GetTbaOwnedItemsOutputDTO>(account);
+        if (dto.Ids == null || dto.Ids.Count == 0) return null;
+        return dto.Ids[0];
     }
 
     public async Task<decimal> GetContractTotalUsdcAsync()
@@ -402,6 +426,24 @@ public class ArcTradingContractClient : MonoBehaviour
     {
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         return await contract.GetFunction("isGatewayTokenSupported").CallAsync<bool>();
+    }
+
+    // ----- GamePayment contract's Npc6551Manager admin -----
+
+    public async Task<string> GetManagerAddressAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
+        return await contract.GetFunction("manager").CallAsync<string>();
+    }
+
+    public async Task<string> SetManagerAsync(string managerAddress)
+    {
+        var web3 = await CreateSignedWeb3Async();
+        var contract = web3.Eth.GetContract(Abi, contractAddress);
+        var fn = contract.GetFunction("setManager");
+        var gas = new HexBigInteger(120000);
+        return await fn.SendTransactionAsync(
+            web3.TransactionManager.Account.Address, gas, null, managerAddress);
     }
 
     // ----- GamePayment contract's owner-only gateway admin -----
@@ -531,16 +573,14 @@ public class ArcTradingContractClient : MonoBehaviour
             if (effectiveAvailableUsdc < capUsdc)
                 await arcNanopayment.ApproveIfNeededThenGatewayDepositAsync((decimal)arcNanopayment.maxNanopaymentUsdc);
 
-            if (string.IsNullOrWhiteSpace(tbaAddress))
-                throw new InvalidOperationException(
-                    $"{name}: tbaAddress is empty — set the NPC's ERC6551 TBA in the Inspector before running the nanopayment mint path; the server validates and refuses to mint without it.");
-            
+            var tba = await EnsureTbaAddressAsync();
+
             var content = await arcNanopayment.FetchPaywalledResourceAsync(
                 arcNanopayment.x402ServerBaseUrl + itemIdToBeMinted,
                 NftTokenId,
                 npcPaymentWalletService,
                 nanopaymentCap,
-                tbaAddress);
+                tba);
             RecordX402Outflow(arcNanopayment.LastPaidAmountSmallestUnits);
             return content;
         }
@@ -660,4 +700,47 @@ public class ArcTradingContractClient : MonoBehaviour
     {
         return (decimal)amount / 1_000_000m;
     }
+
+    private static bool IsZeroAddress(string addr)
+    {
+        if (string.IsNullOrEmpty(addr)) return true;
+        var hex = addr.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? addr.Substring(2) : addr;
+        foreach (var c in hex)
+            if (c != '0') return false;
+        return true;
+    }
+}
+
+// Output DTOs for GamePayment's batched view functions. These are tuple-returning
+// view fns; Nethereum can't decode them into a single primitive, so we route them
+// through [FunctionOutput] DTOs with positional [Parameter] tags.
+
+[FunctionOutput]
+public class GetTbaItemBalancesOutputDTO : IFunctionOutputDTO
+{
+    [Parameter("uint256[5]", "ids",      1)] public List<BigInteger> Ids      { get; set; }
+    [Parameter("uint256[5]", "balances", 2)] public List<BigInteger> Balances { get; set; }
+}
+
+[FunctionOutput]
+public class GetTbaOwnedItemsOutputDTO : IFunctionOutputDTO
+{
+    [Parameter("uint256[]", "ids",      1)] public List<BigInteger> Ids      { get; set; }
+    [Parameter("uint256[]", "balances", 2)] public List<BigInteger> Balances { get; set; }
+}
+
+[FunctionOutput]
+public class GetNpcTbaItemBalancesOutputDTO : IFunctionOutputDTO
+{
+    [Parameter("address",    "tba",      1)] public string            Tba      { get; set; }
+    [Parameter("uint256[5]", "ids",      2)] public List<BigInteger>  Ids      { get; set; }
+    [Parameter("uint256[5]", "balances", 3)] public List<BigInteger>  Balances { get; set; }
+}
+
+[FunctionOutput]
+public class GetNpcTbaOwnedItemsOutputDTO : IFunctionOutputDTO
+{
+    [Parameter("address",   "tba",      1)] public string           Tba      { get; set; }
+    [Parameter("uint256[]", "ids",      2)] public List<BigInteger> Ids      { get; set; }
+    [Parameter("uint256[]", "balances", 3)] public List<BigInteger> Balances { get; set; }
 }

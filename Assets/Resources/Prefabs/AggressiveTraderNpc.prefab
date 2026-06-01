@@ -1039,12 +1039,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  contractAddress: 0x505e788dC7e8B912a580F53250a4C79A40283e22
+  contractAddress: 0x70121a6C38c1b5FC1C3FE5567beC9CfCb47fBC58
   privateKey: 
   initialUsdcCapital: 7
   nftTokenId: 1
   npcPaymentWalletService: {fileID: 0}
-  tbaAddress: 0xa3355c30ea8963E5130F1c923f3B96D31EDD2Cc0
   useBoundWalletAsTrader: 1
 --- !u!114 &5049663735265885691
 MonoBehaviour:

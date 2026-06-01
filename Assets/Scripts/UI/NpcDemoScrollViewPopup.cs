@@ -43,6 +43,12 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
     private float nextRefreshTime;
     private bool followEnabled;
 
+    private const string ValueColor = "#FF6B3D";    // 橙红色 — 数值 / 地址 / 状态
+    private const string CommentColor = "#FFFFFF";  // 白色 — 注释 / 详情
+    private const string GroupColor = "#FFD24A";    // 金黄色 — [Group] 标题
+    private const string TypeColor = "#4FD1C5";     // 青色 — 活动类型
+    private const string HashColor = "#B794F4";     // 紫色 — 交易哈希
+
     private void Awake()
     {
         if (uiFont == null)
@@ -254,12 +260,12 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
     private string BuildSummaryText(TradingNpcSnapshot snapshot)
     {
         builder.Length = 0;
-        builder.AppendLine($"Wallet: {NullText(snapshot.walletAddress)}");
-        builder.AppendLine($"TBA: {NullText(snapshot.tbaAddress)}");
-        builder.AppendLine("Gateway: 0x0077777d7EBA4688BDeF3E311b846F25870A19B9"); // arc testnet gateway wallet address
-        builder.AppendLine($"Position: {snapshot.worldPosition.x:0.##}, {snapshot.worldPosition.y:0.##}, {snapshot.worldPosition.z:0.##}");
-        builder.AppendLine($"Current: {NullText(snapshot.currentActivity)}");
-        builder.AppendLine($"Chain Action Running: {snapshot.isRunningChainAction}");
+        builder.AppendLine($"Wallet: <color={ValueColor}>{NullText(snapshot.walletAddress)}</color>");
+        builder.AppendLine($"TBA: <color={ValueColor}>{NullText(snapshot.tbaAddress)}</color>");
+        builder.AppendLine($"Gateway: <color={ValueColor}>0x0077777d7EBA4688BDeF3E311b846F25870A19B9</color>"); // arc testnet gateway wallet address
+        builder.AppendLine($"Position: <color={ValueColor}>{snapshot.worldPosition.x:0.##}, {snapshot.worldPosition.y:0.##}, {snapshot.worldPosition.z:0.##}</color>");
+        builder.AppendLine($"Current: <color={ValueColor}>{NullText(snapshot.currentActivity)}</color>");
+        builder.AppendLine($"Chain Action Running: <color={ValueColor}>{snapshot.isRunningChainAction}</color>");
         return builder.ToString();
     }
 
@@ -279,11 +285,11 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
                     builder.AppendLine();
                 }
 
-                builder.AppendLine($"[{currentGroup}]");
+                builder.AppendLine($"<color={GroupColor}>[{currentGroup}]</color>");
             }
 
-            builder.AppendLine($"{field.displayName}: {field.value}");
-            builder.AppendLine($"  {field.comment}");
+            builder.AppendLine($"{field.displayName}: <color={ValueColor}>{field.value}</color>");
+            builder.AppendLine($"  <color={CommentColor}>{field.comment}</color>");
         }
 
         return builder.ToString();
@@ -302,24 +308,24 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
         for (int i = 0; i < snapshot.recentActivities.Count; i++)
         {
             TradingNpcActivityRecord activity = snapshot.recentActivities[i];
-            builder.AppendLine($"[{activity.gameTime:0.0}s] {activity.type} - {activity.title}");
+            builder.AppendLine($"[<color={ValueColor}>{activity.gameTime:0.0}s</color>] <color={TypeColor}>{activity.type}</color> - {activity.title}");
 
             if (!string.IsNullOrEmpty(activity.details))
             {
-                builder.AppendLine($"  {activity.details}");
+                builder.AppendLine($"  <color={ValueColor}>{activity.details}</color>");
             }
 
             if (activity.amountUSDC > 0f)
             {
-                builder.AppendLine($"  Amount: {activity.amountUSDC:0.####} USDC");
+                builder.AppendLine($"  Amount: <color={ValueColor}>{activity.amountUSDC:0.####}</color> USDC");
             }
 
             if (!string.IsNullOrEmpty(activity.txHash))
             {
-                builder.AppendLine($"  Tx: {activity.txHash}");
+                builder.AppendLine($"  Tx: <color={HashColor}>{activity.txHash}</color>");
             }
 
-            builder.AppendLine($"  Pos: {activity.worldPosition.x:0.##}, {activity.worldPosition.y:0.##}, {activity.worldPosition.z:0.##}");
+            builder.AppendLine($"  Pos: <color={CommentColor}>{activity.worldPosition.x:0.##}, {activity.worldPosition.y:0.##}, {activity.worldPosition.z:0.##}</color>");
         }
 
         return builder.ToString();
