@@ -7,6 +7,7 @@ using UnityEngine;
 using BtTaskStatus = CleverCrow.Fluid.BTs.Tasks.TaskStatus;
 
 [RequireComponent(typeof(ArcTradingContractClient))]
+[RequireComponent(typeof(NavMeshNavigator))]
 public abstract class TradingNpcActor : AIActor
 {
     [Header("Trader NPC")] public TradingNpcArchetype archetype = TradingNpcArchetype.BalancedTrader;
@@ -19,9 +20,10 @@ public abstract class TradingNpcActor : AIActor
 
     [SerializeField] private Transform shopPoint;
     [SerializeField] private Transform homePoint;
-    [SerializeField] private float arriveHeight = 0.5f;
+    //[SerializeField] private float arriveHeight = 0.5f;
 
     private ArcTradingContractClient contractClient;
+    private NavMeshNavigator navMeshNavigator;
     private float lastRebalanceTime = -999f;
     private float lastChainActionTime = -999f;
     private float lastLivingSpendTime = -999f;
@@ -58,6 +60,7 @@ public abstract class TradingNpcActor : AIActor
         brain = null;
         brainReady = false;
         contractClient = GetComponent<ArcTradingContractClient>();
+        navMeshNavigator = GetComponent<NavMeshNavigator>();
         ConfigurePortfolio();
         CaptureBasePortfolioConfig();
         SubscribeToWorldEvents();
@@ -226,25 +229,43 @@ public abstract class TradingNpcActor : AIActor
         }
 
         Vector3 targetPosition = target.position;
-        targetPosition.y = arriveHeight;
+        //targetPosition.y = arriveHeight;
 
-        if (currentMoveTargetName != target.name)
+        bool targetChanged = currentMoveTargetName != target.name;
+        if (targetChanged)
         {
             currentMoveTargetName = target.name;
             currentActivity = $"Moving to {currentMoveTargetName}";
             AddActivity(TradingNpcActivityType.MoveToTarget, "Move target changed", currentActivity);
         }
+        
+        if (navMeshNavigator != null)
+        {
+            navMeshNavigator.SetDestination(targetPosition);
+        }
+        
+        Vector3 steerTarget = targetPosition;
+        if (navMeshNavigator != null && navMeshNavigator.HasPath)
+        {
+            steerTarget = navMeshNavigator.currentCornerPosition;
+            //steerTarget.y = arriveHeight;
+        }
 
-        Vector3 acceleration = steeringBehaviors.Arrive(targetPosition);
+        Vector3 acceleration = steeringBehaviors.Arrive(steerTarget);
         acceleration = AvoidCollision(acceleration);
 
         steeringBehaviors.Steer(acceleration);
         steeringBehaviors.LookMoveDirection();
 
-        if (steeringBehaviors.IsArrived(targetPosition))
+        bool pathConsumed = navMeshNavigator == null || !navMeshNavigator.HasPath;
+        if (pathConsumed && steeringBehaviors.IsArrived(targetPosition))
         {
             currentActivity = $"Arrived at {currentMoveTargetName}";
             currentMoveTargetName = null;
+            if (navMeshNavigator != null)
+            {
+                navMeshNavigator.ClearPath();
+            }
             return BtTaskStatus.Success;
         }
 
@@ -258,7 +279,7 @@ public abstract class TradingNpcActor : AIActor
             return BtTaskStatus.Success;
         }
 
-        wanderBehaviors.targetHeight = arriveHeight;
+        //wanderBehaviors.targetHeight = arriveHeight;
         Vector3 acceleration = AvoidCollision(wanderBehaviors.GetSteering());
         steeringBehaviors.Steer(acceleration);
         steeringBehaviors.LookMoveDirection();

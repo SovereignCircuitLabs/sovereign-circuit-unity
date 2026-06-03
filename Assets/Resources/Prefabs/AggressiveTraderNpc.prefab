@@ -929,6 +929,7 @@ GameObject:
   - component: {fileID: 1409973764717540689}
   - component: {fileID: 1804220732738009430}
   - component: {fileID: 7307188774162274808}
+  - component: {fileID: 8185457764857330000}
   m_Layer: 6
   m_Name: AggressiveTraderNpc
   m_TagString: Untagged
@@ -1101,7 +1102,6 @@ MonoBehaviour:
   marketPoint: {fileID: 0}
   shopPoint: {fileID: 0}
   homePoint: {fileID: 0}
-  arriveHeight: 0.1
 --- !u!114 &1409973764717540689
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1115,11 +1115,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxVelocity: 8
-  maxAcceleration: 12
-  turnSpeed: 25
-  targetRadius: 0.5
+  maxAcceleration: 15
+  turnSpeed: 40
+  targetRadius: 0.7
   slowRadius: 1
-  timeToTarget: 0.1
+  timeToTarget: 0.2
 --- !u!114 &1804220732738009430
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1150,11 +1150,35 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   rayStart: 0.1
   rayHeight: 0.2
-  rayLength: 15
+  rayLength: 10
   rayCount: 36
   collisionLayers:
     serializedVersion: 2
     m_Bits: 8
+--- !u!114 &8185457764857330000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3258902463958669678}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 67790f8546a5cc841be7dd9dc668825a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cornerReachedDistance: 0.7
+  arrivedDistance: 0.7
+  navMeshSampleRadius: 2
+  areaMask: -1
+  repathInterval: 0.5
+  destinationMoveThreshold: 0.5
+  debugPath: 1
+  stuckCheckInterval: 0.25
+  stuckMoveThreshold: 0.1
+  pushAwayFromNavMeshEdge: 1
+  minEdgeDistance: 1.5
+  edgePushDistance: 1.5
 --- !u!1 &3281356022285216759
 GameObject:
   m_ObjectHideFlags: 0

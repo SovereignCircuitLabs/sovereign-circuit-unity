@@ -1,6 +1,5 @@
 ﻿using UnityEngine;
 
-// 避障
 public class CollisionSensor : MonoBehaviour
 {
     public float rayStart = 0.5f;
