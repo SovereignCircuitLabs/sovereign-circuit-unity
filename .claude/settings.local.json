@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep -l \"157a911d562344689f05ba76759fad05\\\\|a61fa3b806f90094fba4566caa458f2d\\\\|ab7395f49a7e4b1e92d29162ececd076\\\\|d2fd706e88674bd5b57d3b5a4bda7f9b\\\\|3bfb989c3dbbbc14ea604d2c4267b41c\\\\|ade8ba009ed9b9240ae65de4db56ad55\\\\|1bdf8356db66ecb40a334bfc4a37ff8c\\\\|b0b0ed3868b18464b94b06dc3ed67790\")",
+      "Bash(xargs -I {} basename {})"
+    ]
+  }
+}

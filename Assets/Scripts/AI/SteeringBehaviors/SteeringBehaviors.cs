@@ -53,17 +53,22 @@ public class SteeringBehaviors : MonoBehaviour
 
     public bool IsArrived(Vector3 targetPosition)
     {
-        return (targetPosition - transform.position).sqrMagnitude <= targetRadius * targetRadius;
+        //return (targetPosition - transform.position).sqrMagnitude <= targetRadius * targetRadius;
+        Vector3 delta = targetPosition - transform.position;
+        delta.y = 0f;
+        return delta.sqrMagnitude <= targetRadius * targetRadius;
     }
 
     public Vector3 Arrive(Vector3 targetPosition)
     {
         Vector3 targetVelocity = targetPosition - rb.position;
+        targetVelocity.y = 0f;
         float distance = targetVelocity.magnitude;
 
-        if (distance < targetRadius)
+        if (distance <= targetRadius)
         {
             rb.velocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
             return Vector3.zero;
         }
 
@@ -79,8 +84,11 @@ public class SteeringBehaviors : MonoBehaviour
 
         targetVelocity.Normalize();
         targetVelocity *= targetSpeed;
+        
+        Vector3 currentVelocity = rb.velocity;
+        currentVelocity.y = 0f;
 
-        Vector3 acceleration = targetVelocity - rb.velocity;
+        Vector3 acceleration = targetVelocity - currentVelocity;
         acceleration *= 1 / timeToTarget;
 
         if (acceleration.magnitude > maxAcceleration)
