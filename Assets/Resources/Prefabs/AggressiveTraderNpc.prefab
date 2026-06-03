@@ -1174,7 +1174,7 @@ MonoBehaviour:
   repathInterval: 0.5
   destinationMoveThreshold: 0.5
   debugPath: 1
-  stuckCheckInterval: 0.25
+  stuckCheckInterval: 0.3
   stuckMoveThreshold: 0.1
   pushAwayFromNavMeshEdge: 1
   minEdgeDistance: 1.5
