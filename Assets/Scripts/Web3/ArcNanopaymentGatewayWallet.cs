@@ -34,7 +34,7 @@ namespace ArcTrading.Nanopayment
         {
             tradingContractClient = GetComponent<ArcTradingContractClient>();
             rpcUrl = tradingContractClient.RpcUrl;
-            gatewayReadOnlyWeb3 = new Web3(rpcUrl);
+            gatewayReadOnlyWeb3 = ArcWeb3Factory.Create(rpcUrl);
         }
 
         // --------- Write (state-changing) calls ---------
@@ -164,7 +164,7 @@ namespace ArcTrading.Nanopayment
 
             var chainId = await gatewayReadOnlyWeb3.Eth.ChainId.SendRequestAsync();
             var account = new Account(tradingContractClient.PrivateKey.Trim(), chainId.Value);
-            return new Web3(account, rpcUrl);
+            return ArcWeb3Factory.Create(account, rpcUrl);
         }
     }
 }

@@ -65,7 +65,7 @@ public class NpcCharacterContractClient : MonoBehaviour
 
     private void Awake()
     {
-        readOnlyWeb3 = new Web3(rpcUrl);
+        readOnlyWeb3 = ArcWeb3Factory.Create(rpcUrl);
     }
 
     public async Task<long> GetChainIdAsync()
@@ -216,6 +216,6 @@ public class NpcCharacterContractClient : MonoBehaviour
                 $"{name} requires nftOwnerPrivateKey for bind/clear calls.");
         var chainId = await GetChainIdAsync();
         var account = new Account(nftOwnerPrivateKey.Trim(), chainId);
-        return new Web3(account, rpcUrl);
+        return ArcWeb3Factory.Create(account, rpcUrl);
     }
 }

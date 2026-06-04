@@ -111,7 +111,7 @@ public class ArcTradingContractClient : MonoBehaviour
 
     private void Awake()
     {
-        readOnlyWeb3 = new Web3(rpcUrl);
+        readOnlyWeb3 = ArcWeb3Factory.Create(rpcUrl);
     }
 
     public async Task InitializeWalletAsync()
@@ -639,7 +639,7 @@ public class ArcTradingContractClient : MonoBehaviour
         var pk = await ResolveTraderPrivateKeyAsync();
         var chainId = await readOnlyWeb3.Eth.ChainId.SendRequestAsync();
         var account = new Account(pk, chainId.Value);
-        return new Web3(account, rpcUrl);
+        return ArcWeb3Factory.Create(account, rpcUrl);
     }
 
     private async Task<string> ResolveTraderPrivateKeyAsync()

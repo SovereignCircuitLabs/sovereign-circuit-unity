@@ -67,7 +67,7 @@ namespace ArcTrading.Nanopayment
         // {
         //     tradingContractClient = GetComponent<ArcTradingContractClient>();
         //     rpcUrl = tradingContractClient.RpcUrl;
-        //     gatewayReadOnlyWeb3 = new Web3(rpcUrl);
+        //     gatewayReadOnlyWeb3 = ArcWeb3Factory.Create(rpcUrl);
         //
         //     await ApproveIfNeededThenGatewayDepositAsync(1); // deposit 1 usdc into gateway
         //

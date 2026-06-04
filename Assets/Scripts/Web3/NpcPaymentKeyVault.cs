@@ -154,8 +154,26 @@ public class NpcPaymentKeyVault
         var device = SystemInfo.deviceUniqueIdentifier;
         if (string.IsNullOrEmpty(device)) device = "ArcTrading::fallback-device-id";
 
-        using var pbkdf2 = new Rfc2898DeriveBytes(device, Salt, 200_000, HashAlgorithmName.SHA256);
-        return pbkdf2.GetBytes(KeyBytes);
+        // WebGL wasm has no native crypto / SIMD; 200k SHA-256 iters under IL2CPP take 30-60s
+        // each and freeze the browser tab. The vault file lives in IndexedDB (per-origin), not
+        // on a shared disk, so the brute-force threat model is much weaker on WebGL — a lower
+        // work factor is the right trade-off there.
+#if UNITY_WEBGL && !UNITY_EDITOR
+        const int iterations = 1_000;
+#else
+        const int iterations = 200_000;
+#endif
+
+        // var sw = System.Diagnostics.Stopwatch.StartNew();
+        // Debug.Log("[PBKDF2] Start");
+        
+        using var pbkdf2 = new Rfc2898DeriveBytes(device, Salt, iterations, HashAlgorithmName.SHA256);
+        var key = pbkdf2.GetBytes(KeyBytes);
+        
+        // sw.Stop();
+        // Debug.Log("[PBKDF2] End ms = " + sw.ElapsedMilliseconds);
+        
+        return key;
     }
 
     // BouncyCastle is used here instead of System.Security.Cryptography.AesGcm because
