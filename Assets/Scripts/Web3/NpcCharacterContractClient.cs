@@ -2,9 +2,11 @@ using System;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
+using ArcTrading.Auth;
 using Nethereum.ABI.FunctionEncoding.Attributes;
-using Nethereum.Contracts;
+using Nethereum.Hex.HexConvertors.Extensions;
 using Nethereum.Hex.HexTypes;
+using Nethereum.RPC.Eth.DTOs;
 using Nethereum.Web3;
 using Nethereum.Web3.Accounts;
 using UnityEngine;
@@ -24,12 +26,22 @@ public class NpcCharacterContractClient : MonoBehaviour
     [SerializeField] private string nftContractAddress;
 
     // Private key of the EOA that currently owns the NPC NFTs we manage from this client.
-    // NOT used for x402 signing!
+    // NOT used for x402 signing — only for owner-side writes when loginViaAuth=false.
     [SerializeField] private string nftOwnerPrivateKey;
+
+    // When true, owner-side writes go through the WalletLoginService bridge —
+    // each tx triggers a MetaMask popup in the browser. When false, sign locally
+    // with nftOwnerPrivateKey.
+    [SerializeField] private bool loginViaAuth = false;
+
+    [Header("Bridge login (only used when loginViaAuth=true)")]
+    [SerializeField] private int bridgePreferredPort = 7777;
+    [SerializeField] private string bridgeSiweStatement = "Sign in to ArcTrading";
+    [SerializeField] private uint bridgeSessionTtlMinutes = 1440; // 24 h
 
     public string NftContractAddress => nftContractAddress;
     public string RpcUrl => rpcUrl;
-    
+
     private const string Abi = @"[
       {""inputs"":[{""internalType"":""uint256"",""name"":""tokenId"",""type"":""uint256""}],
         ""name"":""getPaymentBinding"",
@@ -55,10 +67,21 @@ public class NpcCharacterContractClient : MonoBehaviour
         ""stateMutability"":""view"",""type"":""function""}
     ]";
 
+    // Minimal ERC-20 transfer ABI — only used to build calldata for the bridge path.
+    private const string Erc20TransferAbi = @"[
+      {""constant"":false,""inputs"":[{""name"":""to"",""type"":""address""},{""name"":""amount"",""type"":""uint256""}],""name"":""transfer"",""outputs"":[{""name"":"""",""type"":""bool""}],""type"":""function""}
+    ]";
+
+    // ERC-6551 TBA accepts execute() only from the parent NFT's owner.
+    private const string Erc6551AccountAbi = @"[
+      {""inputs"":[{""internalType"":""address"",""name"":""to"",""type"":""address""},{""internalType"":""uint256"",""name"":""value"",""type"":""uint256""},{""internalType"":""bytes"",""name"":""data"",""type"":""bytes""},{""internalType"":""uint8"",""name"":""operation"",""type"":""uint8""}],""name"":""execute"",""outputs"":[{""internalType"":""bytes"",""name"":"""",""type"":""bytes""}],""stateMutability"":""payable"",""type"":""function""}
+    ]";
+
     private Web3 readOnlyWeb3;
 
     // Serializes owner-signed tx submission so concurrent bind/clear calls from
-    // multiple NPCs sharing this single client do not race on eth_getTransactionCount.
+    // multiple NPCs sharing this single client do not race on eth_getTransactionCount
+    // (local path) or interleave MetaMask popups (bridge path).
     private static readonly SemaphoreSlim ownerTxGate = new SemaphoreSlim(1, 1);
 
     public long? CachedChainId { get; private set; }
@@ -75,7 +98,7 @@ public class NpcCharacterContractClient : MonoBehaviour
         CachedChainId = id;
         return id;
     }
-    
+
     public async Task<(string wallet, ulong version)> GetPaymentBindingAsync(BigInteger tokenId)
     {
         var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
@@ -95,47 +118,37 @@ public class NpcCharacterContractClient : MonoBehaviour
         var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
         return await contract.GetFunction("exists").CallAsync<bool>(tokenId);
     }
-    
+
     public async Task<string> BindPaymentWalletAsync(BigInteger tokenId, string walletAddress)
     {
-        await ownerTxGate.WaitAsync();
-        try
-        {
-            var web3 = await CreateSignedWeb3Async();
-            var contract = web3.Eth.GetContract(Abi, nftContractAddress);
-            var bind = contract.GetFunction("bindPaymentWallet");
-            var gas = new HexBigInteger(120000);
-            var txHash = await bind.SendTransactionAsync(
-                web3.TransactionManager.Account.Address, gas, null, tokenId, walletAddress);
-            await WaitReceiptAsync(web3, txHash);
-            return txHash;
-        }
-        finally
-        {
-            ownerTxGate.Release();
-        }
+        var data = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress)
+            .GetFunction("bindPaymentWallet")
+            .GetData(tokenId, walletAddress)
+            .HexToByteArray();
+        return await SendOwnerTxAsync(
+            to: nftContractAddress,
+            value: BigInteger.Zero,
+            data: data,
+            gas: new HexBigInteger(120000),
+            waitReceipt: true,
+            label: $"bindPaymentWallet(tokenId={tokenId})");
     }
 
     public async Task<string> ClearPaymentWalletAsync(BigInteger tokenId)
     {
-        await ownerTxGate.WaitAsync();
-        try
-        {
-            var web3 = await CreateSignedWeb3Async();
-            var contract = web3.Eth.GetContract(Abi, nftContractAddress);
-            var clearFn = contract.GetFunction("clearPaymentWallet");
-            var gas = new HexBigInteger(80000);
-            var txHash = await clearFn.SendTransactionAsync(
-                web3.TransactionManager.Account.Address, gas, null, tokenId);
-            await WaitReceiptAsync(web3, txHash);
-            return txHash;
-        }
-        finally
-        {
-            ownerTxGate.Release();
-        }
+        var data = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress)
+            .GetFunction("clearPaymentWallet")
+            .GetData(tokenId)
+            .HexToByteArray();
+        return await SendOwnerTxAsync(
+            to: nftContractAddress,
+            value: BigInteger.Zero,
+            data: data,
+            gas: new HexBigInteger(80000),
+            waitReceipt: true,
+            label: $"clearPaymentWallet(tokenId={tokenId})");
     }
-    
+
     public async Task<string> TransferUsdcFromOwnerAsync(string toAddress, BigInteger amount)
     {
         if (string.IsNullOrWhiteSpace(toAddress))
@@ -143,25 +156,18 @@ public class NpcCharacterContractClient : MonoBehaviour
         if (amount <= BigInteger.Zero)
             throw new ArgumentException("amount must be positive", nameof(amount));
 
-        await ownerTxGate.WaitAsync();
-        try
-        {
-            var web3 = await CreateSignedWeb3Async();
-            var txHash = await Erc20UsdcHelper.TransferAsync(web3, toAddress, amount);
-            await WaitReceiptAsync(web3, txHash);
-            return txHash;
-        }
-        finally
-        {
-            ownerTxGate.Release();
-        }
+        var data = readOnlyWeb3.Eth.GetContract(Erc20TransferAbi, Erc20UsdcHelper.ArcUsdcAddress)
+            .GetFunction("transfer")
+            .GetData(toAddress, amount)
+            .HexToByteArray();
+        return await SendOwnerTxAsync(
+            to: Erc20UsdcHelper.ArcUsdcAddress,
+            value: BigInteger.Zero,
+            data: data,
+            gas: new HexBigInteger(120000),
+            waitReceipt: true,
+            label: $"USDC transfer → {Shorten(toAddress)} ({amount})");
     }
-
-    // ERC-6551 TBA accepts execute() only from the parent NFT's owner
-    // i.e. must sign from nftOwnerPrivateKey
-    private const string Erc6551AccountAbi = @"[
-      {""inputs"":[{""internalType"":""address"",""name"":""to"",""type"":""address""},{""internalType"":""uint256"",""name"":""value"",""type"":""uint256""},{""internalType"":""bytes"",""name"":""data"",""type"":""bytes""},{""internalType"":""uint8"",""name"":""operation"",""type"":""uint8""}],""name"":""execute"",""outputs"":[{""internalType"":""bytes"",""name"":"""",""type"":""bytes""}],""stateMutability"":""payable"",""type"":""function""}
-    ]";
 
     public async Task<string> ExecuteTbaAsOwnerAsync(
         string tbaAddress,
@@ -176,16 +182,45 @@ public class NpcCharacterContractClient : MonoBehaviour
         if (string.IsNullOrWhiteSpace(target))
             throw new ArgumentException("target is required", nameof(target));
 
+        var executeCalldata = readOnlyWeb3.Eth.GetContract(Erc6551AccountAbi, tbaAddress)
+            .GetFunction("execute")
+            .GetData(target, value, data ?? Array.Empty<byte>(), (byte)0)
+            .HexToByteArray();
+        return await SendOwnerTxAsync(
+            to: tbaAddress,
+            value: BigInteger.Zero,
+            data: executeCalldata,
+            gas: gas,
+            waitReceipt: waitForReceipt,
+            label: $"TBA.execute → {Shorten(target)}");
+    }
+
+    // ---------------- shared owner-tx submission ----------------
+
+    /// <summary>
+    /// Single owner-side write path. Picks between local-signing (Inspector PK) and
+    /// the WalletLoginService bridge (MetaMask popup) based on <see cref="loginViaAuth"/>.
+    ///
+    /// Receipt polling always uses readOnlyWeb3 so it works the same for both paths.
+    /// </summary>
+    private async Task<string> SendOwnerTxAsync(
+        string to, BigInteger value, byte[] data, HexBigInteger gas,
+        bool waitReceipt, string label)
+    {
+        var chainId = await GetChainIdAsync();
         await ownerTxGate.WaitAsync();
         try
         {
-            var web3 = await CreateSignedWeb3Async();
-            var tba = web3.Eth.GetContract(Erc6551AccountAbi, tbaAddress);
-            var executeFn = tba.GetFunction("execute");
-            var ownerAddr = web3.TransactionManager.Account.Address;
-            var txHash = await executeFn.SendTransactionAsync(
-                ownerAddr, gas, null, target, value, data ?? Array.Empty<byte>(), (byte)0);
-            if (waitForReceipt) await WaitReceiptAsync(web3, txHash);
+            string txHash;
+            if (loginViaAuth)
+            {
+                txHash = await SendViaBridgeAsync(chainId, to, value, data, gas, label);
+            }
+            else
+            {
+                txHash = await SendViaLocalKeyAsync(chainId, to, value, data, gas);
+            }
+            if (waitReceipt) await WaitReceiptAsync(readOnlyWeb3, txHash);
             return txHash;
         }
         finally
@@ -193,7 +228,58 @@ public class NpcCharacterContractClient : MonoBehaviour
             ownerTxGate.Release();
         }
     }
-    
+
+    private async Task<string> SendViaBridgeAsync(
+        long chainId, string to, BigInteger value, byte[] data, HexBigInteger gas, string label)
+    {
+        var service = WalletLoginService.Instance;
+        if (service == null)
+            throw new InvalidOperationException(
+                $"{name}: loginViaAuth=true but WalletLoginService Singleton is missing. " +
+                "Add a GameObject with WalletLoginService to the scene.");
+
+        service.ConfigureChainId(chainId);
+        var session = await service.EnsureLoggedInAsync(
+            bridgeSiweStatement,
+            bridgePreferredPort,
+            TimeSpan.FromMinutes(Math.Max(1, bridgeSessionTtlMinutes)),
+            CancellationToken.None,
+            persistentBridge: true).ConfigureAwait(true);
+
+        var req = new WalletTxRequest
+        {
+            from = session.wallet,
+            to = to,
+            value = "0x" + value.ToString("x"),
+            data = data == null || data.Length == 0 ? "0x" : "0x" + data.ToHex(),
+            gas = "0x" + gas.Value.ToString("x"),
+            chainId = chainId,
+            label = label,
+        };
+        return await service.SendOwnerTransactionAsync(req).ConfigureAwait(true);
+    }
+
+    private async Task<string> SendViaLocalKeyAsync(
+        long chainId, string to, BigInteger value, byte[] data, HexBigInteger gas)
+    {
+        if (string.IsNullOrWhiteSpace(nftOwnerPrivateKey))
+            throw new InvalidOperationException(
+                $"{name} requires nftOwnerPrivateKey for owner-side writes " +
+                "(or enable loginViaAuth to route through MetaMask).");
+
+        var account = new Account(nftOwnerPrivateKey.Trim(), chainId);
+        var web3 = new Web3(account, rpcUrl);
+        var txInput = new TransactionInput
+        {
+            From = account.Address,
+            To = to,
+            Value = new HexBigInteger(value),
+            Data = data == null || data.Length == 0 ? "0x" : "0x" + data.ToHex(),
+            Gas = gas,
+        };
+        return await web3.Eth.TransactionManager.SendTransactionAsync(txInput).ConfigureAwait(true);
+    }
+
     private static async Task WaitReceiptAsync(Web3 web3, string txHash)
     {
         while (true)
@@ -209,13 +295,9 @@ public class NpcCharacterContractClient : MonoBehaviour
         }
     }
 
-    private async Task<Web3> CreateSignedWeb3Async()
+    private static string Shorten(string addr)
     {
-        if (string.IsNullOrWhiteSpace(nftOwnerPrivateKey))
-            throw new InvalidOperationException(
-                $"{name} requires nftOwnerPrivateKey for bind/clear calls.");
-        var chainId = await GetChainIdAsync();
-        var account = new Account(nftOwnerPrivateKey.Trim(), chainId);
-        return new Web3(account, rpcUrl);
+        if (string.IsNullOrEmpty(addr) || addr.Length < 12) return addr ?? "";
+        return addr.Substring(0, 6) + "…" + addr.Substring(addr.Length - 4);
     }
 }

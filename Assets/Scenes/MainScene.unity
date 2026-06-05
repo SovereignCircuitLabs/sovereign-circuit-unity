@@ -612,6 +612,7 @@ GameObject:
   - component: {fileID: 947144900}
   - component: {fileID: 947144901}
   - component: {fileID: 947144902}
+  - component: {fileID: 947144903}
   m_Layer: 0
   m_Name: NpcChainService
   m_TagString: Untagged
@@ -649,6 +650,10 @@ MonoBehaviour:
   rpcUrl: https://rpc.testnet.arc.network
   nftContractAddress: 0x5324033F69BA0D4DADdc07f00f44D2777CBc53Db
   nftOwnerPrivateKey: 0xc5153c66596cdc5ab9918202eb84ba91e2a553d89782d30be4eb32cc7bf270f1
+  loginViaAuth: 1
+  bridgePreferredPort: 7777
+  bridgeSiweStatement: Sign in to ArcTrading
+  bridgeSessionTtlMinutes: 1440
 --- !u!114 &947144902
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -663,6 +668,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   npcContract: {fileID: 947144901}
   vaultFileName: npc-payment-keys.json
+--- !u!114 &947144903
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 947144899}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dabf70b2095a5bc4fafa5013ec8c3ac6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1001 &995509923
 PrefabInstance:
   m_ObjectHideFlags: 0

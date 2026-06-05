@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <!-- Unity replaces __LOGIN_CONFIG__ with HTML-attr-encoded JSON before serving. -->
+  <meta name="login-config" content="__LOGIN_CONFIG__" />
+  <title>ArcTrading — Wallet Login</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d12;
+      --panel: #151823;
+      --border: #242938;
+      --fg: #e6e9f2;
+      --muted: #8b91a8;
+      --accent: #66b2ff;
+      --ok: #5cd197;
+      --err: #ff7a7a;
+    }
+    html, body {
+      margin: 0;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    main {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 48px 24px 24px;
+    }
+    h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: .2px; }
+    .sub { color: var(--muted); margin-bottom: 28px; font-size: 14px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .row + .row { margin-top: 14px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .value {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 13px;
+      word-break: break-all;
+    }
+    button {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #1d2230;
+      color: var(--fg);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    button:hover:not(:disabled) { background: #232a3b; border-color: #2f3650; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #061322; }
+    button.primary:hover:not(:disabled) { background: #82c0ff; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .actions { margin-top: 20px; display: grid; gap: 10px; }
+    .status { margin-top: 18px; font-size: 13px; min-height: 18px; }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+    .status.info { color: var(--muted); }
+    code { font-family: ui-monospace, Menlo, monospace; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ArcTrading</h1>
+    <div class="sub">Connect your wallet to sign in to the game.</div>
+
+    <section class="panel">
+      <div class="row">
+        <label>Network</label>
+        <div class="value" id="chain-id">—</div>
+      </div>
+      <div class="row">
+        <label>Connected Address</label>
+        <div class="value" id="address">—</div>
+      </div>
+      <div class="row">
+        <label>Challenge Nonce</label>
+        <div class="value" id="nonce">—</div>
+      </div>
+
+      <div class="actions">
+        <button id="btn-connect" class="primary">Connect Wallet</button>
+        <button id="btn-sign" disabled>Sign In</button>
+      </div>
+
+      <div id="status" class="status info">Detecting wallet…</div>
+    </section>
+  </main>
+
+  <script type="module">
+    // ----- read injected server config -----
+    const cfgEl = document.querySelector('meta[name="login-config"]');
+    const cfg = JSON.parse(cfgEl?.getAttribute('content') ?? '{}');
+    document.getElementById('nonce').textContent = cfg.nonce ?? '—';
+    document.getElementById('chain-id').textContent =
+      cfg.chainId ? `Chain ID ${cfg.chainId}` : 'Chain ID 0 (not enforced)';
+
+    const statusEl = document.getElementById('status');
+    const addrEl = document.getElementById('address');
+    const btnConnect = document.getElementById('btn-connect');
+    const btnSign = document.getElementById('btn-sign');
+
+    function setStatus(text, kind /* "ok" | "err" | "info" */) {
+      statusEl.textContent = text;
+      statusEl.className = `status ${kind ?? 'info'}`;
+    }
+
+    // ----- provider detection -----
+    let provider = window.ethereum;
+    let currentAddress = null;
+
+    if (!provider) {
+      setStatus('No EIP-1193 wallet detected. Install MetaMask, Rabby, or Coinbase Wallet, then refresh this page.', 'err');
+      btnConnect.disabled = true;
+      btnConnect.textContent = 'Install MetaMask';
+      btnConnect.classList.remove('primary');
+      btnConnect.addEventListener('click', () => window.open('https://metamask.io/download/', '_blank', 'noopener'));
+    } else {
+      setStatus('Wallet detected. Click "Connect Wallet" to continue.', 'info');
+    }
+
+    // ----- connect -----
+    btnConnect.addEventListener('click', async () => {
+      if (!provider) return;
+      btnConnect.disabled = true;
+      setStatus('Requesting wallet connection…', 'info');
+      try {
+        const accounts = await provider.request({ method: 'eth_requestAccounts' });
+        if (!Array.isArray(accounts) || accounts.length === 0) {
+          throw new Error('wallet returned no accounts');
+        }
+        currentAddress = accounts[0];
+        addrEl.textContent = currentAddress;
+        btnSign.disabled = false;
+        setStatus('Wallet connected. Click "Sign In" to sign the challenge message.', 'info');
+      } catch (err) {
+        console.error(err);
+        setStatus(`Connection failed: ${err?.message ?? err}`, 'err');
+        btnConnect.disabled = false;
+      }
+    });
+
+    // ----- sign + post -----
+    btnSign.addEventListener('click', async () => {
+      if (!currentAddress) return;
+      btnSign.disabled = true;
+      btnConnect.disabled = true;
+      setStatus('Building SIWE message…', 'info');
+
+      const issuedAt = new Date().toISOString();
+      const message = buildSiweMessage({
+        domain: cfg.domain,
+        address: currentAddress,
+        statement: cfg.statement,
+        uri: cfg.uri,
+        chainId: cfg.chainId ?? 0,
+        nonce: cfg.nonce,
+        issuedAt,
+        expirationTime: cfg.expiresAt
+      });
+
+      let signature;
+      try {
+        setStatus('Awaiting wallet signature…', 'info');
+        const hexMsg = utf8ToHex(message);
+        signature = await provider.request({
+          method: 'personal_sign',
+          params: [hexMsg, currentAddress]
+        });
+      } catch (err) {
+        console.error(err);
+        setStatus(`Signature cancelled or failed: ${err?.message ?? err}`, 'err');
+        btnSign.disabled = false;
+        btnConnect.disabled = false;
+        return;
+      }
+
+      setStatus('Verifying with game client…', 'info');
+      try {
+        const resp = await fetch(cfg.authEndpoint ?? '/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, signature })
+        });
+        const body = await resp.json().catch(() => ({}));
+        if (!resp.ok || !body.ok) {
+          const reason = body.error ?? `HTTP ${resp.status}`;
+          setStatus(`Login rejected: ${reason}`, 'err');
+          btnSign.disabled = false;
+          btnConnect.disabled = false;
+          return;
+        }
+        if (cfg.bridgeMode || body.bridgeMode) {
+          // Bridge mode: stay open and relay MetaMask signatures to Unity until
+          // the game tells the server to shut down (or the user closes the tab).
+          setStatus(`Login complete (${body.wallet}). Bridge active — keep this tab open while playing.`, 'ok');
+          btnConnect.style.display = 'none';
+          btnSign.style.display = 'none';
+          startTxBridge();
+        } else {
+          setStatus(`Login complete. You can return to the game. (${body.wallet})`, 'ok');
+          // Some browsers refuse window.close; attempt but don't rely on it.
+          setTimeout(() => { try { window.close(); } catch (_) {} }, 2500);
+        }
+      } catch (err) {
+        console.error(err);
+        setStatus(`Could not reach game client: ${err?.message ?? err}`, 'err');
+        btnSign.disabled = false;
+        btnConnect.disabled = false;
+      }
+    });
+
+    // ----- tx bridge (only when cfg.bridgeMode === true) -----
+    async function startTxBridge() {
+      const nextUrl = cfg.txNextEndpoint ?? '/tx-next';
+      const resultUrl = cfg.txResultEndpoint ?? '/tx-result';
+      let consecutiveErrors = 0;
+
+      while (true) {
+        let req;
+        try {
+          // Long-poll: server holds up to ~25s waiting for a queued tx.
+          const resp = await fetch(nextUrl, { method: 'GET' });
+          if (resp.status === 204) { consecutiveErrors = 0; continue; }
+          if (resp.status === 503) {
+            setStatus('Game client shut down the bridge. You can close this tab.', 'info');
+            return;
+          }
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          req = await resp.json();
+          consecutiveErrors = 0;
+        } catch (err) {
+          consecutiveErrors++;
+          // Server probably went away (Unity quit). Stop polling after a few tries.
+          if (consecutiveErrors >= 3) {
+            setStatus('Lost connection to game client. Reload to retry.', 'err');
+            return;
+          }
+          await sleep(1500);
+          continue;
+        }
+
+        await handleBridgeTx(req, resultUrl);
+      }
+    }
+
+    async function handleBridgeTx(req, resultUrl) {
+      const labelPart = req.label ? ` — ${req.label}` : '';
+      setStatus(`MetaMask approval requested${labelPart}…`, 'info');
+
+      // Build the EIP-1193 transaction params. Drop empty fields so MetaMask
+      // applies its own defaults (gas estimation, nonce, etc.).
+      const tx = { from: req.from, to: req.to };
+      if (req.value && req.value !== '0x0' && req.value !== '0x00') tx.value = req.value;
+      if (req.data && req.data !== '0x') tx.data = req.data;
+      if (req.gas) tx.gas = req.gas;
+      if (req.chainId) tx.chainId = '0x' + Number(req.chainId).toString(16);
+
+      let txHash = null;
+      let error = null;
+      try {
+        txHash = await provider.request({
+          method: 'eth_sendTransaction',
+          params: [tx]
+        });
+        setStatus(`Tx submitted: ${shorten(txHash)}${labelPart}. Bridge waiting…`, 'ok');
+      } catch (err) {
+        console.error('bridge tx failed', err);
+        error = err?.message ?? String(err);
+        setStatus(`Tx rejected${labelPart}: ${error}`, 'err');
+      }
+
+      try {
+        await fetch(resultUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: req.id, txHash, error })
+        });
+      } catch (postErr) {
+        console.error('failed to POST tx-result', postErr);
+      }
+    }
+
+    function shorten(s) {
+      if (!s) return '';
+      return s.length > 14 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s;
+    }
+
+    function sleep(ms) {
+      return new Promise(r => setTimeout(r, ms));
+    }
+
+    // ----- pure helpers -----
+    function buildSiweMessage(p) {
+      // Must stay byte-identical to ArcTrading.Auth.SiweMessage.Build (server side parses
+      // by regex, so trailing whitespace and field order matter).
+      return (
+        `${p.domain} wants you to sign in with your Ethereum account:\n` +
+        `${p.address}\n` +
+        `\n` +
+        `${p.statement}\n` +
+        `\n` +
+        `URI: ${p.uri}\n` +
+        `Version: 1\n` +
+        `Chain ID: ${p.chainId}\n` +
+        `Nonce: ${p.nonce}\n` +
+        `Issued At: ${p.issuedAt}\n` +
+        `Expiration Time: ${p.expirationTime}`
+      );
+    }
+
+    function utf8ToHex(str) {
+      const bytes = new TextEncoder().encode(str);
+      let hex = '0x';
+      for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
+      return hex;
+    }
+  </script>
+</body>
+</html>
