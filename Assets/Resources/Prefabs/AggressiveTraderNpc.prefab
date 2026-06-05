@@ -1040,7 +1040,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  contractAddress: 0x8274AEC72E8c7Ac0eB411A23fCde8058Ad41E8ab
+  contractAddress: 0xc7C9BBCe60802c94AfB7e224e98928A4Ee0de158
   privateKey: 
   initialUsdcCapital: 7
   nftTokenId: 1

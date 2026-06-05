@@ -169,6 +169,9 @@ public class NpcCharacterContractClient : MonoBehaviour
             label: $"USDC transfer → {Shorten(toAddress)} ({amount})");
     }
 
+    /// <summary>
+    /// legacy
+    /// </summary>
     public async Task<string> ExecuteTbaAsOwnerAsync(
         string tbaAddress,
         string target,
