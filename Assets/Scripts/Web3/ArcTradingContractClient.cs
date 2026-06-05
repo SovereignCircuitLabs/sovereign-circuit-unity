@@ -6,6 +6,7 @@ using ArcTrading.Nanopayment;
 using Nethereum.ABI.FunctionEncoding.Attributes;
 using Nethereum.Hex.HexConvertors.Extensions;
 using Nethereum.Hex.HexTypes;
+using Nethereum.RPC.Eth.DTOs;
 using Nethereum.Web3;
 using Nethereum.Web3.Accounts;
 using UnityEngine;
@@ -15,7 +16,7 @@ public class ArcTradingContractClient : MonoBehaviour
     [SerializeField] private string rpcUrl = "https://rpc.testnet.arc.network";
     public string RpcUrl => rpcUrl;
     // GamePayment contract address
-    [SerializeField] private string contractAddress = "0x8274AEC72E8c7Ac0eB411A23fCde8058Ad41E8ab";
+    [SerializeField] private string contractAddress = "0xc7C9BBCe60802c94AfB7e224e98928A4Ee0de158";
     public string ContractAddress => contractAddress;
     [SerializeField] private string privateKey;
     [SerializeField] private float initialUsdcCapital = 0.5f;
@@ -95,6 +96,12 @@ public class ArcTradingContractClient : MonoBehaviour
       {""inputs"":[{""internalType"":""address"",""name"":""account"",""type"":""address""},{""internalType"":""uint256"",""name"":""id"",""type"":""uint256""}],""name"":""balanceOf"",""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""stateMutability"":""view"",""type"":""function""},
       {""inputs"":[{""internalType"":""address"",""name"":""operator"",""type"":""address""},{""internalType"":""bool"",""name"":""approved"",""type"":""bool""}],""name"":""setApprovalForAll"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
       {""inputs"":[{""internalType"":""address"",""name"":""account"",""type"":""address""},{""internalType"":""address"",""name"":""operator"",""type"":""address""}],""name"":""isApprovedForAll"",""outputs"":[{""internalType"":""bool"",""name"":"""",""type"":""bool""}],""stateMutability"":""view"",""type"":""function""}
+    ]";
+
+    // ERC-6551 TBA execute(). Operator can call this after NpcCharacter binding is
+    // honored by the account implementation's _isValidSigner.
+    private const string Erc6551AccountAbi = @"[
+      {""inputs"":[{""internalType"":""address"",""name"":""to"",""type"":""address""},{""internalType"":""uint256"",""name"":""value"",""type"":""uint256""},{""internalType"":""bytes"",""name"":""data"",""type"":""bytes""},{""internalType"":""uint8"",""name"":""operation"",""type"":""uint8""}],""name"":""execute"",""outputs"":[{""internalType"":""bytes"",""name"":"""",""type"":""bytes""}],""stateMutability"":""payable"",""type"":""function""}
     ]";
 
     private const int ItemTypeCount = 5;
@@ -600,18 +607,18 @@ public class ArcTradingContractClient : MonoBehaviour
     
     /// <summary>
     /// Sell one NFT held by the NPC's ERC-6551 TBA.
+    /// Signed by the paymentWallet.
     /// </summary>
     public async Task<string> SellItemAsync(string tbaAddress, BigInteger itemId)
     {
-        if (npcPaymentWalletService == null || npcPaymentWalletService.NpcContract == null)
+        if (npcPaymentWalletService == null)
             throw new InvalidOperationException(
-                $"{name}: SellItemAsync needs NpcCharacterContractClient (NFT owner key) " +
-                "to sign ERC-6551 execute — wire npcPaymentWalletService in the Inspector.");
+                $"{name}: SellItemAsync needs NpcPaymentWalletService to resolve the operator key.");
 
+        var operatorWeb3 = await CreateOperatorWeb3Async();
         var itemsAddr = await GetItemsAddressAsync();
-        var itemsReadonly = readOnlyWeb3.Eth.GetContract(Erc1155Abi, itemsAddr);
 
-        // 检查 TBA 是否已经授权 GamePayment 操作它的 ERC1155 NFT，没授权的话先授权
+        var itemsReadonly = readOnlyWeb3.Eth.GetContract(Erc1155Abi, itemsAddr);
         var approved = await itemsReadonly.GetFunction("isApprovedForAll")
             .CallAsync<bool>(tbaAddress, contractAddress);
         if (!approved)
@@ -619,19 +626,63 @@ public class ArcTradingContractClient : MonoBehaviour
             var setApprovalData = itemsReadonly.GetFunction("setApprovalForAll")
                 .GetData(contractAddress, true)
                 .HexToByteArray();
-            await npcPaymentWalletService.NpcContract.ExecuteTbaAsOwnerAsync(
-                tbaAddress, itemsAddr, BigInteger.Zero, setApprovalData,
+            await SendTbaExecuteAsync(
+                operatorWeb3, tbaAddress, itemsAddr, setApprovalData,
                 new HexBigInteger(200000), waitForReceipt: true);
         }
 
-        // 让 TBA 调用 GamePayment.sellItem(itemId)
         var sellItemData = readOnlyWeb3.Eth.GetContract(Abi, contractAddress)
             .GetFunction("sellItem")
             .GetData(itemId)
             .HexToByteArray();
-        return await npcPaymentWalletService.NpcContract.ExecuteTbaAsOwnerAsync(
-            tbaAddress, contractAddress, BigInteger.Zero, sellItemData,
+        return await SendTbaExecuteAsync(
+            operatorWeb3, tbaAddress, contractAddress, sellItemData,
             new HexBigInteger(400000), waitForReceipt: false);
+    }
+
+    private async Task<Web3> CreateOperatorWeb3Async()
+    {
+        var signer = await npcPaymentWalletService.EnsureBoundOrRebindAsync(NftTokenId);
+        var chainId = await readOnlyWeb3.Eth.ChainId.SendRequestAsync();
+        var account = new Account(signer.PrivateKey, chainId.Value);
+        return new Web3(account, rpcUrl);
+    }
+
+    private async Task<string> SendTbaExecuteAsync(
+        Web3 operatorWeb3, string tbaAddress, string target,
+        byte[] data, HexBigInteger gas, bool waitForReceipt)
+    {
+        var executeData = readOnlyWeb3.Eth.GetContract(Erc6551AccountAbi, tbaAddress)
+            .GetFunction("execute")
+            .GetData(target, BigInteger.Zero, data ?? Array.Empty<byte>(), (byte)0);
+        var txInput = new TransactionInput
+        {
+            From = operatorWeb3.TransactionManager.Account.Address,
+            To = tbaAddress,
+            Value = new HexBigInteger(BigInteger.Zero),
+            Data = executeData,
+            Gas = gas,
+        };
+        var txHash = await operatorWeb3.Eth.TransactionManager
+            .SendTransactionAsync(txInput).ConfigureAwait(true);
+        if (waitForReceipt) await WaitReceiptAsync(txHash);
+        return txHash;
+    }
+
+    private async Task WaitReceiptAsync(string txHash)
+    {
+        while (true)
+        {
+            var receipt = await readOnlyWeb3.Eth.Transactions.GetTransactionReceipt
+                .SendRequestAsync(txHash);
+            if (receipt != null)
+            {
+                if (receipt.Status == null || receipt.Status.Value == BigInteger.Zero)
+                    throw new InvalidOperationException($"tx {txHash} reverted");
+                return;
+            }
+            await Task.Delay(800);
+        }
     }
 
     private async Task<Web3> CreateSignedWeb3Async()
