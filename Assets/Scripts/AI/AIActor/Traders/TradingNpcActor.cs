@@ -39,6 +39,10 @@ public abstract class TradingNpcActor : AIActor
     private NpcPortfolioConfig basePortfolioConfig;
     private WorldEventManager subscribedWorldEventManager;
 
+    // Set by OwnedNpcSpawner before activation. Overrides ConfigurePortfolio()'s
+    // archetype defaults so on-chain NpcCharacter.portfolio wins.
+    private NpcPortfolioConfig pendingChainPortfolioOverride;
+
     public string WalletAddress
     {
         get { return contractClient != null ? contractClient.WalletAddress : null; }
@@ -62,6 +66,12 @@ public abstract class TradingNpcActor : AIActor
         contractClient = GetComponent<ArcTradingContractClient>();
         navMeshNavigator = GetComponent<NavMeshNavigator>();
         ConfigurePortfolio();
+        // On-chain NpcCharacter.portfolio overrides archetype defaults when present.
+        if (pendingChainPortfolioOverride != null)
+        {
+            portfolioConfig.CopyFrom(pendingChainPortfolioOverride);
+            pendingChainPortfolioOverride = null;
+        }
         CaptureBasePortfolioConfig();
         SubscribeToWorldEvents();
         ApplyWorldEventConfig();
@@ -629,6 +639,28 @@ public abstract class TradingNpcActor : AIActor
     {
         currentActivity = title;
         AddActivity(type, title, details, txHash, amountUSDC);
+    }
+
+    /// <summary>
+    /// Inject the on-chain portfolio config that should win over the archetype
+    /// defaults set by <see cref="ConfigurePortfolio"/>. Must be called before
+    /// Start() — i.e. while the instance is still under an inactive parent.
+    /// </summary>
+    public void SetRuntimePortfolioOverride(NpcPortfolioConfig config)
+    {
+        pendingChainPortfolioOverride = NpcPortfolioConfig.CopyOf(config);
+    }
+
+    /// <summary>
+    /// Wire up the scene-level navigation targets onto this runtime instance.
+    /// The prefab's serialized references are null because they point at scene
+    /// Transforms that don't exist in the prefab asset.
+    /// </summary>
+    public void SetRuntimeWorldPoints(Transform market, Transform shop, Transform home)
+    {
+        if (market != null) marketPoint = market;
+        if (shop != null)   shopPoint   = shop;
+        if (home != null)   homePoint   = home;
     }
 
     private void AddActivity(
