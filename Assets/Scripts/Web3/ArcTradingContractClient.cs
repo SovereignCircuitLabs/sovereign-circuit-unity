@@ -126,6 +126,30 @@ public class ArcTradingContractClient : MonoBehaviour
         var web3 = await CreateSignedWeb3Async();
         WalletAddress = web3.TransactionManager.Account.Address;
     }
+
+    /// <summary>
+    /// Set the on-chain NPC NFT tokenId at runtime (used by OwnedNpcSpawner when
+    /// instantiating prefabs from chain-discovered NPCs). MUST be called before
+    /// Start() / InitializeWalletAsync / EnsurePaymentWalletBoundAsync — i.e. while
+    /// the instance is still under an inactive parent.
+    /// </summary>
+    public void SetNftTokenIdForRuntime(ulong tokenId)
+    {
+        nftTokenId = tokenId;
+        cachedTbaAddress = null;
+        cachedTraderPrivateKey = null;
+        cachedTraderKeyVersion = 0;
+    }
+
+    /// <summary>
+    /// Wire up the shared scene-level NpcPaymentWalletService onto this runtime
+    /// instance (prefab's serialized reference is null because the dependency
+    /// lives in the scene, not in the prefab asset).
+    /// </summary>
+    public void SetNpcPaymentWalletServiceForRuntime(NpcPaymentWalletService service)
+    {
+        npcPaymentWalletService = service;
+    }
     
     public async Task<NpcPaymentSigner?> EnsurePaymentWalletBoundAsync()
     {

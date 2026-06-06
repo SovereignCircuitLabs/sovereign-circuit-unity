@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,6 +17,54 @@ public class PaymentBindingDTO : IFunctionOutputDTO
 {
     [Parameter("address", "wallet", 1)] public string Wallet { get; set; }
     [Parameter("uint64",  "version", 2)] public ulong Version { get; set; }
+}
+
+// Mirrors NpcCharacter.PortfolioConfig (Solidity). Stored fields are 6-decimal USDC
+// for amounts, bps (0..10000) for weights, and seconds for intervals.
+public class PortfolioConfigDTO
+{
+    [Parameter("uint16", "livingNeedsWeightBps", 1)] public ushort LivingNeedsWeightBps { get; set; }
+    [Parameter("uint16", "reserveWeightBps", 2)]    public ushort ReserveWeightBps { get; set; }
+    [Parameter("uint16", "tradingWeightBps", 3)]    public ushort TradingWeightBps { get; set; }
+    [Parameter("uint64", "minimumLivingBudgetUSDC", 4)]  public ulong MinimumLivingBudgetUSDC { get; set; }
+    [Parameter("uint64", "minimumReserveBudgetUSDC", 5)] public ulong MinimumReserveBudgetUSDC { get; set; }
+    [Parameter("uint32", "rebalanceIntervalSeconds", 6)] public uint RebalanceIntervalSeconds { get; set; }
+    [Parameter("uint32", "chainActionCooldownSeconds", 7)] public uint ChainActionCooldownSeconds { get; set; }
+    [Parameter("uint64", "minTradeUSDC", 8)] public ulong MinTradeUSDC { get; set; }
+    [Parameter("uint64", "maxTradeUSDC", 9)] public ulong MaxTradeUSDC { get; set; }
+}
+
+// Mirrors NpcCharacter.NpcData (Solidity).
+public class NpcDataDTO
+{
+    [Parameter("string", "npcName", 1)]      public string NpcName { get; set; }
+    [Parameter("string", "metadataURI", 2)]  public string MetadataURI { get; set; }
+    [Parameter("uint8",  "archetype", 3)]    public byte Archetype { get; set; }
+    [Parameter("uint8",  "riskLevel", 4)]    public byte RiskLevel { get; set; }
+    [Parameter("uint16", "level", 5)]        public ushort Level { get; set; }
+    [Parameter("uint32", "reputation", 6)]   public uint Reputation { get; set; }
+    [Parameter("tuple",  "portfolio", 7)]    public PortfolioConfigDTO Portfolio { get; set; }
+}
+
+// Wrapper because getNpc() returns a single tuple at the top-level outputs slot;
+// CallDeserializingToObjectAsync needs a [FunctionOutput] DTO whose first parameter
+// holds that tuple.
+[FunctionOutput]
+public class GetNpcOutputDTO : IFunctionOutputDTO
+{
+    [Parameter("tuple", "", 1)] public NpcDataDTO Data { get; set; }
+}
+
+public readonly struct OwnedNpc
+{
+    public readonly BigInteger TokenId;
+    public readonly NpcDataDTO Data;
+
+    public OwnedNpc(BigInteger tokenId, NpcDataDTO data)
+    {
+        TokenId = tokenId;
+        Data = data;
+    }
 }
 
 public class NpcCharacterContractClient : MonoBehaviour
@@ -64,6 +113,37 @@ public class NpcCharacterContractClient : MonoBehaviour
       {""inputs"":[{""internalType"":""uint256"",""name"":""tokenId"",""type"":""uint256""}],
         ""name"":""exists"",
         ""outputs"":[{""internalType"":""bool"",""name"":"""",""type"":""bool""}],
+        ""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""address"",""name"":""owner"",""type"":""address""}],
+        ""name"":""balanceOf"",
+        ""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],
+        ""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],
+        ""name"":""nextTokenId"",
+        ""outputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],
+        ""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""tokenId"",""type"":""uint256""}],
+        ""name"":""getNpc"",
+        ""outputs"":[{
+          ""components"":[
+            {""internalType"":""string"",""name"":""npcName"",""type"":""string""},
+            {""internalType"":""string"",""name"":""metadataURI"",""type"":""string""},
+            {""internalType"":""uint8"",""name"":""archetype"",""type"":""uint8""},
+            {""internalType"":""uint8"",""name"":""riskLevel"",""type"":""uint8""},
+            {""internalType"":""uint16"",""name"":""level"",""type"":""uint16""},
+            {""internalType"":""uint32"",""name"":""reputation"",""type"":""uint32""},
+            {""components"":[
+              {""internalType"":""uint16"",""name"":""livingNeedsWeightBps"",""type"":""uint16""},
+              {""internalType"":""uint16"",""name"":""reserveWeightBps"",""type"":""uint16""},
+              {""internalType"":""uint16"",""name"":""tradingWeightBps"",""type"":""uint16""},
+              {""internalType"":""uint64"",""name"":""minimumLivingBudgetUSDC"",""type"":""uint64""},
+              {""internalType"":""uint64"",""name"":""minimumReserveBudgetUSDC"",""type"":""uint64""},
+              {""internalType"":""uint32"",""name"":""rebalanceIntervalSeconds"",""type"":""uint32""},
+              {""internalType"":""uint32"",""name"":""chainActionCooldownSeconds"",""type"":""uint32""},
+              {""internalType"":""uint64"",""name"":""minTradeUSDC"",""type"":""uint64""},
+              {""internalType"":""uint64"",""name"":""maxTradeUSDC"",""type"":""uint64""}],
+            ""internalType"":""struct NpcCharacter.PortfolioConfig"",""name"":""portfolio"",""type"":""tuple""}],
+          ""internalType"":""struct NpcCharacter.NpcData"",""name"":"""",""type"":""tuple""}],
         ""stateMutability"":""view"",""type"":""function""}
     ]";
 
@@ -117,6 +197,80 @@ public class NpcCharacterContractClient : MonoBehaviour
     {
         var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
         return await contract.GetFunction("exists").CallAsync<bool>(tokenId);
+    }
+
+    public async Task<BigInteger> BalanceOfAsync(string owner)
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
+        return await contract.GetFunction("balanceOf").CallAsync<BigInteger>(owner);
+    }
+
+    public async Task<BigInteger> GetNextTokenIdAsync()
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
+        return await contract.GetFunction("nextTokenId").CallAsync<BigInteger>();
+    }
+
+    public async Task<NpcDataDTO> GetNpcAsync(BigInteger tokenId)
+    {
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
+        var fn = contract.GetFunction("getNpc");
+        var wrapped = await fn.CallDeserializingToObjectAsync<GetNpcOutputDTO>(tokenId);
+        return wrapped?.Data;
+    }
+    
+    public async Task<List<OwnedNpc>> EnumerateOwnedNpcsAsync(
+        string owner, CancellationToken ct = default)
+    {
+        var result = new List<OwnedNpc>();
+        if (string.IsNullOrWhiteSpace(owner)) return result;
+
+        var next = await GetNextTokenIdAsync();
+        if (next <= BigInteger.One) return result;
+
+        // Skip the enumeration entirely if the owner holds nothing.
+        var balance = await BalanceOfAsync(owner);
+        if (balance == BigInteger.Zero) return result;
+
+        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
+        
+        var ownerOfFn = contract.GetFunction("ownerOf");
+        var getNpcFn  = contract.GetFunction("getNpc");
+
+        for (BigInteger id = BigInteger.One; id < next; id += BigInteger.One)
+        {
+            ct.ThrowIfCancellationRequested();
+            string holder;
+            try
+            {
+                holder = await ownerOfFn.CallAsync<string>(id);
+            }
+            catch
+            {
+                // Burned / nonexistent tokenId reverts; skip.
+                continue;
+            }
+
+            if (!string.Equals(holder, owner, StringComparison.OrdinalIgnoreCase)) continue;
+
+            NpcDataDTO data;
+            try
+            {
+                var wrapped = await getNpcFn.CallDeserializingToObjectAsync<GetNpcOutputDTO>(id);
+                data = wrapped?.Data;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[NpcCharacterContractClient] getNpc({id}) failed: {ex.Message}");
+                continue;
+            }
+            if (data == null) continue;
+
+            result.Add(new OwnedNpc(id, data));
+            if (result.Count >= (int)balance) break; // early exit
+        }
+
+        return result;
     }
 
     public async Task<string> BindPaymentWalletAsync(BigInteger tokenId, string walletAddress)
