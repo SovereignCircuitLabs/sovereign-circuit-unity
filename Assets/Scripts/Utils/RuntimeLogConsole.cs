@@ -22,6 +22,8 @@ public class RuntimeLogConsole : MonoBehaviour
     private static readonly Color BuyTradeColor = new Color(0.55f, 1f, 0.78f);       // mint — BuyNFT / mintRandom
     private static readonly Color MacroAgentColor = new Color(0.85f, 0.75f, 1f);     // lavender — MacroAgent
     private static readonly Color WorldEventColor = new Color(1f, 0.65f, 0.55f);     // salmon — world events
+    private static readonly Color WalletLoginColor = new Color(0.55f, 0.95f, 0.55f); // emerald — browser wallet auth
+    private static readonly Color OwnedNpcSpawnColor = new Color(1f, 0.92f, 0.62f);  // pale yellow — owned NPC spawn
 
     private readonly List<LogEntry> entries = new List<LogEntry>();
     private readonly StringBuilder builder = new StringBuilder(4096);
@@ -382,6 +384,20 @@ public class RuntimeLogConsole : MonoBehaviour
             return true;
         }
 
+        // Browser wallet login flow (local HTTP bridge + SIWE session)
+        if (message.Contains("[WalletLoginServer]")
+            || message.Contains("[WalletLoginService]")
+            || message.Contains("[WalletSession]"))
+        {
+            return true;
+        }
+
+        // Player-owned NPC NFT discovery + spawn
+        if (message.Contains("[OwnedNpcSpawner]"))
+        {
+            return true;
+        }
+
         return false;
     }
 
@@ -404,6 +420,15 @@ public class RuntimeLogConsole : MonoBehaviour
         if (message.Contains("BuyNFT") || message.Contains("Deposit")) return BuyTradeColor;
         if (message.Contains("[MacroAgent]")) return MacroAgentColor;
         if (message.Contains("World event")) return WorldEventColor;
+
+        // Browser wallet login + owned NPC spawn — surface the startup auth flow distinctly
+        if (message.Contains("[WalletLoginServer]")
+            || message.Contains("[WalletLoginService]")
+            || message.Contains("[WalletSession]"))
+        {
+            return WalletLoginColor;
+        }
+        if (message.Contains("[OwnedNpcSpawner]")) return OwnedNpcSpawnColor;
 
         if (message.Contains("Aggressive")) return new Color(1f, 0.38f, 0.36f);
         if (message.Contains("Balanced")) return new Color(0.25f, 0.78f, 1f);
