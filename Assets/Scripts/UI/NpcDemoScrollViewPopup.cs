@@ -30,12 +30,17 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
     [SerializeField] private Button closePopupButton;
     [SerializeField] private Button followButton;
     [SerializeField] private Button focusButton;
+    [SerializeField] private Button openGamePaymentScanButton;
+    [SerializeField] private Button openTbaScanButton;
 
     [Header("World Events")]
     [SerializeField] private WorldEventManager worldEventManager;
     [SerializeField] private GameObject worldEventPanelRoot;
     [SerializeField] private Text worldEventStatusText;
     [SerializeField] private Button clearWorldEventsButton;
+
+    [Header("Arcscan")]
+    [SerializeField] private string arcscanBaseUrl = "https://testnet.arcscan.app";
 
     private readonly List<GameObject> spawnedNpcButtons = new List<GameObject>();
     private readonly List<Button> worldEventButtons = new List<Button>();
@@ -265,6 +270,11 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
         builder.AppendLine($"Gateway: <color={ValueColor}>0x0077777d7EBA4688BDeF3E311b846F25870A19B9</color>"); // arc testnet gateway wallet address
         builder.AppendLine($"Position: <color={ValueColor}>{snapshot.worldPosition.x:0.##}, {snapshot.worldPosition.y:0.##}, {snapshot.worldPosition.z:0.##}</color>");
         builder.AppendLine($"Current: <color={ValueColor}>{NullText(snapshot.currentActivity)}</color>");
+        builder.AppendLine($"Init: <color={ValueColor}>{snapshot.initState}</color> ({snapshot.initAttempt}/{snapshot.initMaxAttempts})");
+        if (!string.IsNullOrEmpty(snapshot.initLastError))
+        {
+            builder.AppendLine($"Init Err: <color={ValueColor}>{snapshot.initLastError}</color>");
+        }
         builder.AppendLine($"Chain Action Running: <color={ValueColor}>{snapshot.isRunningChainAction}</color>");
         return builder.ToString();
     }
@@ -357,6 +367,18 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
             copyPaymentWalletPkBtn.onClick.AddListener(OnCopyPaymentWalletPkClicked);
         }
 
+        if (openGamePaymentScanButton != null)
+        {
+            openGamePaymentScanButton.onClick.RemoveAllListeners();
+            openGamePaymentScanButton.onClick.AddListener(OpenGamePaymentContractInExplorer);
+        }
+
+        if (openTbaScanButton != null)
+        {
+            openTbaScanButton.onClick.RemoveAllListeners();
+            openTbaScanButton.onClick.AddListener(OpenSelectedNpcTbaInExplorer);
+        }
+
         BindWorldEventButtons();
     }
 
@@ -400,6 +422,91 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
         {
             Debug.LogError($"[CopyPaymentWalletPk] Failed to resolve payment wallet for {npc.name}: {ex.Message}");
         }
+    }
+
+    // ---- Arcscan link handlers ----
+    // Bind these to UI Buttons in the Inspector (OnClick → NpcDemoScrollViewPopup.Open*InExplorer).
+
+    /// <summary>Open the selected NPC's TBA address on Arcscan.</summary>
+    public void OpenSelectedNpcTbaInExplorer()
+    {
+        TradingNpcActor npc = dataSource != null ? dataSource.SelectedNpc : null;
+        if (npc == null) { ArcscanWarn("No NPC selected — click an NPC in the list first."); return; }
+        ArcTradingContractClient client = npc.GetComponent<ArcTradingContractClient>();
+        string tba = client != null ? client.TbaAddress : null;
+        if (string.IsNullOrWhiteSpace(tba)) { ArcscanWarn($"{npc.name}: TBA not resolved yet."); return; }
+        OpenExplorer($"/address/{tba}");
+    }
+
+    /// <summary>Open the GamePayment contract on Arcscan.</summary>
+    public void OpenGamePaymentContractInExplorer()
+    {
+        TradingNpcActor npc = dataSource != null ? dataSource.SelectedNpc : null;
+        ArcTradingContractClient client = npc != null ? npc.GetComponent<ArcTradingContractClient>() : null;
+        if (client == null) client = FindObjectOfType<ArcTradingContractClient>();
+        string addr = client != null ? client.ContractAddress : null;
+        if (string.IsNullOrWhiteSpace(addr)) { ArcscanWarn("GamePayment address unknown."); return; }
+        OpenExplorer($"/address/{addr}");
+    }
+
+    /// <summary>Open the NpcCharacter (ERC-721) contract on Arcscan.</summary>
+    public void OpenNpcCharacterContractInExplorer()
+    {
+        NpcCharacterContractClient nft = FindObjectOfType<NpcCharacterContractClient>();
+        string addr = nft != null ? nft.NftContractAddress : null;
+        if (string.IsNullOrWhiteSpace(addr)) { ArcscanWarn("NpcCharacter address unknown."); return; }
+        OpenExplorer($"/token/{addr}");
+    }
+
+    /// <summary>Open the selected NPC's NFT instance page (NpcCharacter ERC-721 / tokenId).</summary>
+    public void OpenSelectedNpcNftInExplorer()
+    {
+        TradingNpcActor npc = dataSource != null ? dataSource.SelectedNpc : null;
+        if (npc == null) { ArcscanWarn("No NPC selected — click an NPC in the list first."); return; }
+        NpcCharacterContractClient nft = FindObjectOfType<NpcCharacterContractClient>();
+        ArcTradingContractClient client = npc.GetComponent<ArcTradingContractClient>();
+        string nftAddr = nft != null ? nft.NftContractAddress : null;
+        System.Numerics.BigInteger tokenId = client != null ? client.NftTokenId : System.Numerics.BigInteger.Zero;
+        if (string.IsNullOrWhiteSpace(nftAddr) || tokenId == System.Numerics.BigInteger.Zero)
+        {
+            ArcscanWarn($"{npc.name}: NpcCharacter address or tokenId unknown.");
+            return;
+        }
+        OpenExplorer($"/token/{nftAddr}/instance/{tokenId}");
+    }
+
+    /// <summary>Open the GameItems (ERC-1155) contract on Arcscan.</summary>
+    public async void OpenItemsContractInExplorer()
+    {
+        TradingNpcActor npc = dataSource != null ? dataSource.SelectedNpc : null;
+        ArcTradingContractClient client = npc != null ? npc.GetComponent<ArcTradingContractClient>() : null;
+        if (client == null) client = FindObjectOfType<ArcTradingContractClient>();
+        if (client == null) { ArcscanWarn("No ArcTradingContractClient found in scene."); return; }
+        try
+        {
+            string itemsAddr = await client.GetItemsAddressAsync();
+            if (string.IsNullOrWhiteSpace(itemsAddr)) { ArcscanWarn("Items address unknown."); return; }
+            OpenExplorer($"/token/{itemsAddr}");
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[Arcscan] OpenItems failed: {ex.Message}");
+        }
+    }
+
+    private void OpenExplorer(string path)
+    {
+        string baseUrl = string.IsNullOrWhiteSpace(arcscanBaseUrl)
+            ? "https://testnet.arcscan.app"
+            : arcscanBaseUrl.TrimEnd('/');
+        string url = baseUrl + path;
+        Debug.Log($"[Arcscan] Opening {url}");
+        Application.OpenURL(url);
+    }
+
+    private static void ArcscanWarn(string msg)
+    {
+        Debug.LogWarning($"[Arcscan] {msg}");
     }
 
     private void BindWorldEventButtons()

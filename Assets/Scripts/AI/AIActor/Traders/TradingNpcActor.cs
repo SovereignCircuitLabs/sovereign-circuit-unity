@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using CleverCrow.Fluid.BTs.Trees;
 using Newtonsoft.Json.Linq;
@@ -22,6 +23,13 @@ public abstract class TradingNpcActor : AIActor
     [SerializeField] private Transform homePoint;
     //[SerializeField] private float arriveHeight = 0.5f;
 
+    [Header("Init Retry")]
+    [SerializeField] private int maxInitAttempts = 5;
+    [SerializeField] private float initBaseBackoffSeconds = 2f;
+    [SerializeField] private float initMaxBackoffSeconds = 30f;
+    [SerializeField] private float initStepTimeoutSeconds = 20f;
+    [SerializeField] private float fallbackBackgroundRetryIntervalSeconds = 30f;
+
     private ArcTradingContractClient contractClient;
     private NavMeshNavigator navMeshNavigator;
     private float lastRebalanceTime = -999f;
@@ -32,6 +40,11 @@ public abstract class TradingNpcActor : AIActor
     private bool asyncActionSucceeded;
     private string asyncActionName;
     private bool brainReady;
+    private NpcInitState initState = NpcInitState.Initializing;
+    private int initAttempt;
+    private string initLastError;
+    private CancellationTokenSource initCts;
+    private bool fallbackBrainInstalled;
     private readonly List<TradingNpcActivityRecord> activityLog = new List<TradingNpcActivityRecord>();
     private const int MaxActivityLogCount = 100;
     private string currentActivity = "Initializing";
@@ -58,7 +71,7 @@ public abstract class TradingNpcActor : AIActor
         get { return asyncActionRunning; }
     }
 
-    protected override async void Start()
+    protected override void Start()
     {
         base.Start();
         brain = null;
@@ -76,26 +89,17 @@ public abstract class TradingNpcActor : AIActor
         SubscribeToWorldEvents();
         ApplyWorldEventConfig();
 
-        try
-        {
-            await InitializePortfolioAsync();
-            if (this == null)
-            {
-                return;
-            }
+        initCts = new CancellationTokenSource();
+        _ = RunInitPipelineWithRetryAsync(initCts.Token);
+    }
 
-            InitAI();
-            brainReady = true;
-        }
-        catch (Exception ex)
+    private void OnDestroy()
+    {
+        if (initCts != null)
         {
-            if (this == null)
-            {
-                return;
-            }
-
-            Debug.LogError($"{LogPrefix} failed to initialize trader portfolio: {ex}");
-            AddActivity(TradingNpcActivityType.ChainActionFailed, "Initialize failed", ex.Message);
+            initCts.Cancel();
+            initCts.Dispose();
+            initCts = null;
         }
     }
 
@@ -307,7 +311,7 @@ public abstract class TradingNpcActor : AIActor
     {
         float spend = Mathf.Min(portfolioState.walletUSDC,
             Mathf.Max(0.005f, portfolioConfig.minimumLivingBudgetUSDC * 0.25f));
-        portfolioState.walletUSDC -= spend;
+        //portfolioState.walletUSDC -= spend;
         portfolioState.livingBudgetUSDC += spend;
         lastLivingSpendTime = Time.time;
         currentActivity = $"Bought living supplies: {spend:0.####} USDC";
@@ -347,6 +351,11 @@ public abstract class TradingNpcActor : AIActor
         }
 
         if (Time.time - lastChainActionTime < portfolioConfig.chainActionCooldown)
+        {
+            return false;
+        }
+
+        if (portfolioState.livingBudgetUSDC < portfolioConfig.minimumLivingBudgetUSDC)
         {
             return false;
         }
@@ -441,51 +450,190 @@ public abstract class TradingNpcActor : AIActor
         };
     }
 
-    private async Task InitializePortfolioAsync()
+    private async Task RunInitPipelineWithRetryAsync(CancellationToken ct)
     {
-        await contractClient.InitializeWalletAsync();
+        for (initAttempt = 1; initAttempt <= maxInitAttempts; initAttempt++)
+        {
+            if (ct.IsCancellationRequested) return;
+            initState = NpcInitState.Initializing;
+            currentActivity = $"Initializing (attempt {initAttempt}/{maxInitAttempts})";
+
+            try
+            {
+                await InitializePortfolioAsync(ct);
+                if (this == null || ct.IsCancellationRequested) return;
+                InitAI();
+                initState = NpcInitState.Ready;
+                brainReady = true;
+                initLastError = null;
+                return;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                if (this == null) return;
+                initLastError = ex.Message;
+                Debug.LogWarning($"{LogPrefix} init attempt {initAttempt}/{maxInitAttempts} failed: {ex.Message}");
+                AddActivity(
+                    TradingNpcActivityType.ChainActionFailed,
+                    $"Init attempt {initAttempt}/{maxInitAttempts} failed",
+                    ex.Message);
+
+                if (initAttempt >= maxInitAttempts) break;
+
+                float backoff = Mathf.Min(
+                    initMaxBackoffSeconds,
+                    initBaseBackoffSeconds * Mathf.Pow(2f, initAttempt - 1));
+                initState = NpcInitState.Retrying;
+                currentActivity = $"Init failed, retry in {backoff:0}s — {Truncate(ex.Message)}";
+
+                try { await Task.Delay(TimeSpan.FromSeconds(backoff), ct); }
+                catch (OperationCanceledException) { return; }
+            }
+        }
+
+        if (this == null || ct.IsCancellationRequested) return;
+        EnterFallback(ct);
+    }
+
+    private async Task InitializePortfolioAsync(CancellationToken ct)
+    {
+        await WithTimeoutAsync(
+            contractClient.InitializeWalletAsync(),
+            initStepTimeoutSeconds, "InitializeWallet", ct);
 
         // generate or load x402 signature payment wallet and bind it to the NPC(NFT)
-        try
+        var signer = await WithTimeoutAsync(
+            contractClient.EnsurePaymentWalletBoundAsync(),
+            initStepTimeoutSeconds, "EnsurePaymentWalletBound", ct);
+        if (signer.HasValue)
         {
-            var signer = await contractClient.EnsurePaymentWalletBoundAsync();
-            if (signer.HasValue)
-            {
-                AddActivity(
-                    TradingNpcActivityType.Initialized,
-                    "Payment wallet bound",
-                    $"tokenId={signer.Value.TokenId}, paymentWallet={signer.Value.Address}, version={signer.Value.Version}");
-                Debug.Log(
-                    $"{LogPrefix} payment wallet bound: tokenId={signer.Value.TokenId}, addr={signer.Value.Address}, version={signer.Value.Version}");
-            }
-
-            await contractClient.EnsureNpcHasInitialCapitalAsync();
-            await RefreshBalancesAsync();
-            AllocateBudgetsFromBalances();
-            lastRebalanceTime = Time.time;
-            currentActivity = "Initialized";
             AddActivity(
                 TradingNpcActivityType.Initialized,
-                "Portfolio initialized",
-                $"wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, address={contractClient.WalletAddress}");
+                "Payment wallet bound",
+                $"tokenId={signer.Value.TokenId}, paymentWallet={signer.Value.Address}, version={signer.Value.Version}");
+            Debug.Log(
+                $"{LogPrefix} payment wallet bound: tokenId={signer.Value.TokenId}, addr={signer.Value.Address}, version={signer.Value.Version}");
+        }
 
-            Debug.Log($"{LogPrefix} initialized USDC portfolio for {contractClient.WalletAddress}: " +
-                      $"wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, " +
-                      $"living={portfolioState.livingBudgetUSDC:0.####}, " +
-                      $"reserve={portfolioState.reserveBudgetUSDC:0.####}, " +
-                      $"trading={portfolioState.tradingBudgetUSDC:0.####}");
-        }
-        catch (NpcSignerNotOwned ex)
+        await WithTimeoutAsync(
+            contractClient.EnsureNpcHasInitialCapitalAsync(),
+            initStepTimeoutSeconds, "EnsureInitialCapital", ct);
+        await WithTimeoutAsync(
+            RefreshBalancesAsync(),
+            initStepTimeoutSeconds, "RefreshBalances", ct);
+
+        AllocateBudgetsFromBalances();
+        lastRebalanceTime = Time.time;
+        currentActivity = "Initialized";
+        AddActivity(
+            TradingNpcActivityType.Initialized,
+            "Portfolio initialized",
+            $"wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, address={contractClient.WalletAddress}");
+
+        Debug.Log($"{LogPrefix} initialized USDC portfolio for {contractClient.WalletAddress}: " +
+                  $"wallet={portfolioState.walletUSDC:0.####}, vault={portfolioState.vaultUSDC:0.####}, " +
+                  $"living={portfolioState.livingBudgetUSDC:0.####}, " +
+                  $"reserve={portfolioState.reserveBudgetUSDC:0.####}, " +
+                  $"trading={portfolioState.tradingBudgetUSDC:0.####}");
+    }
+
+    private void EnterFallback(CancellationToken ct)
+    {
+        initState = NpcInitState.Failed;
+        currentActivity = $"Init failed after {maxInitAttempts} attempts — fallback (wander)";
+        AddActivity(
+            TradingNpcActivityType.ChainActionFailed,
+            "Entered fallback (wander-only)",
+            initLastError);
+        InstallFallbackBrain();
+        _ = RunBackgroundRetryLoopAsync(ct);
+    }
+
+    private void InstallFallbackBrain()
+    {
+        if (fallbackBrainInstalled) return;
+        brain = new BehaviorTreeBuilder(gameObject)
+            .Selector()
+            .Do("Wander", Wander)
+            .End()
+            .Build();
+        brainReady = true;
+        fallbackBrainInstalled = true;
+    }
+
+    private async Task RunBackgroundRetryLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested && initState == NpcInitState.Failed)
         {
-            Debug.LogWarning($"{LogPrefix} {ex.Message}");
-            AddActivity(TradingNpcActivityType.ChainActionFailed, "Payment wallet not owned by this device",
-                ex.Message);
+            try { await Task.Delay(TimeSpan.FromSeconds(fallbackBackgroundRetryIntervalSeconds), ct); }
+            catch (OperationCanceledException) { return; }
+            if (this == null || ct.IsCancellationRequested) return;
+
+            try
+            {
+                initState = NpcInitState.Retrying;
+                currentActivity = "Background retry init…";
+                await InitializePortfolioAsync(ct);
+                if (this == null || ct.IsCancellationRequested) return;
+
+                // Swap fallback brain for the real one.
+                brain = null;
+                brainReady = false;
+                fallbackBrainInstalled = false;
+                InitAI();
+                initState = NpcInitState.Ready;
+                brainReady = true;
+                initLastError = null;
+                AddActivity(TradingNpcActivityType.Initialized, "Background retry succeeded", null);
+                return;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                if (this == null) return;
+                initLastError = ex.Message;
+                initState = NpcInitState.Failed;
+                currentActivity = $"Background retry failed — {Truncate(ex.Message)}";
+                AddActivity(TradingNpcActivityType.ChainActionFailed, "Background retry failed", ex.Message);
+            }
         }
-        catch (Exception ex)
+    }
+
+    private static async Task WithTimeoutAsync(Task task, float seconds, string label, CancellationToken ct)
+    {
+        var delay = Task.Delay(TimeSpan.FromSeconds(seconds), ct);
+        var winner = await Task.WhenAny(task, delay);
+        if (winner != task)
         {
-            Debug.LogError($"{LogPrefix} failed to bind payment wallet: {ex}");
-            AddActivity(TradingNpcActivityType.ChainActionFailed, "Bind payment wallet failed", ex.Message);
+            ct.ThrowIfCancellationRequested();
+            throw new TimeoutException($"{label} timed out after {seconds:0}s");
         }
+        await task;
+    }
+
+    private static async Task<T> WithTimeoutAsync<T>(Task<T> task, float seconds, string label, CancellationToken ct)
+    {
+        var delay = Task.Delay(TimeSpan.FromSeconds(seconds), ct);
+        var winner = await Task.WhenAny(task, delay);
+        if (winner != task)
+        {
+            ct.ThrowIfCancellationRequested();
+            throw new TimeoutException($"{label} timed out after {seconds:0}s");
+        }
+        return await task;
+    }
+
+    private static string Truncate(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        return s.Length <= 80 ? s : s.Substring(0, 80) + "…";
     }
 
     private async Task RefreshBalancesAsync()
@@ -604,6 +752,10 @@ public abstract class TradingNpcActor : AIActor
             worldPosition = transform.position,
             currentActivity = currentActivity,
             isRunningChainAction = asyncActionRunning,
+            initState = initState,
+            initAttempt = initAttempt,
+            initMaxAttempts = maxInitAttempts,
+            initLastError = initLastError,
             portfolioConfig = portfolioConfig,
             portfolioState = portfolioState,
             fields = BuildFieldDisplayInfo()
