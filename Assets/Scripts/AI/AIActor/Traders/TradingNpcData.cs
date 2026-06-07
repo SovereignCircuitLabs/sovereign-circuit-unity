@@ -9,6 +9,14 @@ public enum TradingNpcArchetype
     AggressiveSpeculator
 }
 
+public enum NpcInitState
+{
+    Initializing,
+    Retrying,
+    Ready,
+    Failed
+}
+
 public enum TradeIntent
 {
     Hold,

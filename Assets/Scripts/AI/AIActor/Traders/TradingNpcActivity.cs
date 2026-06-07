@@ -50,6 +50,10 @@ public class TradingNpcSnapshot
     public Vector3 worldPosition;
     public string currentActivity;
     public bool isRunningChainAction;
+    public NpcInitState initState;
+    public int initAttempt;
+    public int initMaxAttempts;
+    public string initLastError;
     public NpcPortfolioConfig portfolioConfig;
     public NpcPortfolioState portfolioState;
     public List<NpcFieldDisplayInfo> fields = new List<NpcFieldDisplayInfo>();
