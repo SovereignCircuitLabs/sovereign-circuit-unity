@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 [DisallowMultipleComponent]
@@ -39,14 +40,20 @@ public class RuntimeLogConsole : MonoBehaviour
         public string Message;
         public Color Color;
     }
-
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void Create()
+    
+    [RuntimeInitializeOnLoadMethod]
+    private static void Init()
     {
-        if (FindObjectOfType<RuntimeLogConsole>() != null)
-        {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (scene.name != "MainScene")
             return;
-        }
+
+        if (FindObjectOfType<RuntimeLogConsole>() != null)
+            return;
 
         GameObject root = new GameObject("Runtime Log Console");
         DontDestroyOnLoad(root);
