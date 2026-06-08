@@ -125,6 +125,19 @@
       font-size: 13px;
       text-align: center;
     }
+    .leaderboard-header-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #btn-leaderboard-refresh {
+      width: auto;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 6px;
+    }
+    #btn-leaderboard-refresh.is-busy { opacity: .6; cursor: progress; }
 
     /* Price chart */
     #price-chart-wrap {
@@ -190,7 +203,10 @@
     <section class="panel" id="leaderboard-panel">
       <div class="panel-header">
         <h2>NPC Wealth Leaderboard</h2>
-        <span class="meta" id="leaderboard-meta">—</span>
+        <div class="leaderboard-header-controls">
+          <span class="meta" id="leaderboard-meta">—</span>
+          <button id="btn-leaderboard-refresh" class="toggle" type="button" title="Refresh now">Refresh</button>
+        </div>
       </div>
       <div id="leaderboard-body">
         <div class="empty">Loading on-chain NPCs…</div>
@@ -481,7 +497,7 @@
     const MAX_LEADERBOARD_NPCS = 50;   // hard cap on the scan window
     const TOP_N = 10;
     const PRICE_POLL_MS = 15_000;
-    const LEADERBOARD_POLL_MS = 60_000;
+    const LEADERBOARD_POLL_MS = 20_000;
     const PRICE_HISTORY_KEY = 'arctrading.priceHistory.v1';
     const PRICE_HISTORY_MAX_SAMPLES = 120;   // ~30 min at 15s cadence
 
@@ -683,6 +699,28 @@
     window.addEventListener('resize', () => renderChart());
 
     // ----- leaderboard -----
+    let leaderboardInflight = null;
+    function runLeaderboardPoll(reason) {
+      // Prevent overlapping polls — the serial scan over up to 50 tokenIds may
+      // outrun the interval on a slow RPC. Subsequent triggers fall through to
+      // the in-flight promise so callers (button, visibilitychange, interval)
+      // can still await completion.
+      if (leaderboardInflight) return leaderboardInflight;
+      const btn = document.getElementById('btn-leaderboard-refresh');
+      if (btn) btn.classList.add('is-busy');
+      leaderboardInflight = (async () => {
+        try {
+          await pollLeaderboardOnce();
+        } catch (err) {
+          console.error(`[leaderboard] poll (${reason ?? 'unspecified'}) failed`, err);
+        } finally {
+          leaderboardInflight = null;
+          if (btn) btn.classList.remove('is-busy');
+        }
+      })();
+      return leaderboardInflight;
+    }
+
     async function pollLeaderboardOnce() {
       const provider = getProvider();
       const bodyEl = document.getElementById('leaderboard-body');
@@ -867,9 +905,23 @@
       const lastCached = priceHistory[priceHistory.length - 1];
       if (lastCached) { renderChart(); renderLegend(lastCached); }
 
-      await Promise.allSettled([pollPricesOnce(), pollLeaderboardOnce()]);
+      await Promise.allSettled([pollPricesOnce(), runLeaderboardPoll('boot')]);
       setInterval(pollPricesOnce, PRICE_POLL_MS);
-      setInterval(pollLeaderboardOnce, LEADERBOARD_POLL_MS);
+      setInterval(() => runLeaderboardPoll('interval'), LEADERBOARD_POLL_MS);
+
+      // Force a refresh as soon as the user returns to the tab — relevant for
+      // the buy-NPC flow, where the user finishes the trade in MetaMask and
+      // then refocuses this tab to verify the new owner. setInterval gets
+      // throttled to ≥60s in backgrounded tabs, so without this the leaderboard
+      // can lag the on-chain state by a full minute even after the tx confirms.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') runLeaderboardPoll('visibility');
+      });
+
+      const refreshBtn = document.getElementById('btn-leaderboard-refresh');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => runLeaderboardPoll('manual'));
+      }
     })();
   </script>
 </body>

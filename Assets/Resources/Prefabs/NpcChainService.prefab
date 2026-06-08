@@ -48,8 +48,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  nftContractAddress: 0x54B621e18058Ee5F0AF669760A0660934abe6D43
-  nftOwnerPrivateKey: 0xc5153c66596cdc5ab9918202eb84ba91e2a553d89782d30be4eb32cc7bf270f1
+  nftContractAddress: 0xF2E0566943ccf02211B083140FaA9d60c76A108F
+  nftOwnerPrivateKey: 
   loginViaAuth: 1
   bridgePreferredPort: 7777
   bridgeSiweStatement: Sign in to ArcTrading
@@ -80,6 +80,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dabf70b2095a5bc4fafa5013ec8c3ac6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gamePaymentAddress: 0xC1722279Dfdf4cEc81c7FA87e530D5c81994D5d4
+  usdcAddress: 0x3600000000000000000000000000000000000000
+  gatewayAddress: 0x0077777d7EBA4688BDeF3E311b846F25870A19B9
 --- !u!114 &7318653222943605767
 MonoBehaviour:
   m_ObjectHideFlags: 0
