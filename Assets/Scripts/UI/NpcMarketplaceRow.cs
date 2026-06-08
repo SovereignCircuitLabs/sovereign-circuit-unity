@@ -53,7 +53,7 @@ public class NpcMarketplaceRow : MonoBehaviour
             priceLabel.text = $"{priceUsdc:0.######} USDC";
 
         if (tbaValueLabel != null)
-            tbaValueLabel.text = $"TBA value: {tbaValueUsdc:0.######} USDC";
+            tbaValueLabel.text = $"{tbaValueUsdc:0.######} USDC";
 
         if (sellerLabel != null)
             sellerLabel.text = ShortAddress(info.Seller);

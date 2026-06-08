@@ -11,7 +11,6 @@ GameObject:
   - component: {fileID: 2109989708205798276}
   - component: {fileID: 7604934809089489008}
   - component: {fileID: 6295885926912080280}
-  - component: {fileID: 284971951048744908}
   - component: {fileID: 7318653222943605767}
   m_Layer: 0
   m_Name: NpcChainService
@@ -68,21 +67,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   npcContract: {fileID: 7604934809089489008}
   vaultFileName: npc-payment-keys.json
---- !u!114 &284971951048744908
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4256463651876399753}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: dabf70b2095a5bc4fafa5013ec8c3ac6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  gamePaymentAddress: 0xC1722279Dfdf4cEc81c7FA87e530D5c81994D5d4
-  usdcAddress: 0x3600000000000000000000000000000000000000
-  gatewayAddress: 0x0077777d7EBA4688BDeF3E311b846F25870A19B9
 --- !u!114 &7318653222943605767
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -2,18 +2,10 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace ArcTrading.Auth
 {
-    /// <summary>
-    /// Future hook for an external session backend (e.g. mint a JWT from the SIWE
-    /// signature, persist it server-side, drive WebGL). Not implemented in this PR.
-    /// </summary>
-    public interface IRemoteSessionExchange
-    {
-        Task<string> ExchangeAsync(WalletSession local, CancellationToken ct);
-    }
-
     /// <summary>
     /// Singleton entry point for the desktop wallet login + tx bridge flow.
     ///
@@ -36,6 +28,8 @@ namespace ArcTrading.Auth
         [SerializeField] private string usdcAddress = "0x3600000000000000000000000000000000000000";
         [Tooltip("Circle Gateway Wallet — read totalBalance(usdc, paymentWallet) per NPC for the leaderboard's 'Gateway' column.")]
         [SerializeField] private string gatewayAddress = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9";
+        
+        [SerializeField] private NpcCharacterContractClient npcContract;
 
         public WalletSession Current { get; private set; }
         public bool HasSession => Current != null && Current.IsValidNow();
@@ -48,6 +42,7 @@ namespace ArcTrading.Auth
         public event Action<WalletSession> OnLoginSucceeded;
 
         private long cachedChainId;
+        private bool chainIdConfigured = false;
         private WalletLoginServer activeServer;
         private TaskCompletionSource<WalletSession> inflight;
 
@@ -61,8 +56,17 @@ namespace ArcTrading.Auth
         {
             try
             {
-                var chainId = await GetComponent<NpcCharacterContractClient>().GetChainIdAsync();
-                ConfigureChainId(chainId);
+                if (npcContract == null)
+                {
+                    npcContract = FindObjectOfType<NpcCharacterContractClient>();
+                }
+
+                if (!chainIdConfigured)
+                {
+                    var chainId = await npcContract.GetChainIdAsync();
+                    ConfigureChainId(chainId);
+                }
+
                 await EnsureLoggedInAsync(
                     "Sign in to ArcTrading",
                     7777,
@@ -80,7 +84,11 @@ namespace ArcTrading.Auth
             }
         }
 
-        public void ConfigureChainId(long chainId) => cachedChainId = chainId;
+        public void ConfigureChainId(long chainId)
+        {
+            cachedChainId = chainId;
+            chainIdConfigured = true;
+        }
 
         /// <summary>
         /// Returns a valid WalletSession, prompting the user via the OS browser when
@@ -120,12 +128,19 @@ namespace ArcTrading.Auth
             inflight = new TaskCompletionSource<WalletSession>(TaskCreationOptions.RunContinuationsAsynchronously);
             try
             {
-                var npcContract = GetComponent<NpcCharacterContractClient>();
+                // Prefer the Inspector-wired serialized field; fall back to a
+                // same-GameObject GetComponent for the legacy single-GameObject
+                // setup. Without this, an Inspector-wired sibling reference is
+                // silently ignored here — index.html then receives empty rpcUrl
+                // / npcCharacterAddress and hides the leaderboard + price chart.
+                var contract = npcContract != null
+                    ? npcContract
+                    : FindObjectOfType<NpcCharacterContractClient>();
                 var server = new WalletLoginServer(
                     siweStatement, cachedChainId, sessionTtl, persistentBridge,
-                    rpcUrl: npcContract != null ? npcContract.RpcUrl : string.Empty,
+                    rpcUrl: contract != null ? contract.RpcUrl : string.Empty,
                     gamePaymentAddress: gamePaymentAddress ?? string.Empty,
-                    npcCharacterAddress: npcContract != null ? npcContract.NftContractAddress : string.Empty,
+                    npcCharacterAddress: contract != null ? contract.NftContractAddress : string.Empty,
                     usdcAddress: usdcAddress ?? string.Empty,
                     gatewayAddress: gatewayAddress ?? string.Empty);
                 server.Start(preferredPort);
