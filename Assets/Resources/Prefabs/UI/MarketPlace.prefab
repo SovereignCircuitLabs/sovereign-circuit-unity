@@ -88,7 +88,6 @@ GameObject:
   - component: {fileID: 4634525112757679}
   - component: {fileID: 4663595905507844709}
   - component: {fileID: 7559759138077327686}
-  - component: {fileID: 2161154868371131600}
   m_Layer: 5
   m_Name: MarketPlace
   m_TagString: Untagged
@@ -198,21 +197,6 @@ MonoBehaviour:
   loadingIndicator: {fileID: 1695941135372618588}
   buySlippageBps: 500
   autoRefreshInterval: 60
---- !u!114 &2161154868371131600
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 583079406924808436}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: dabf70b2095a5bc4fafa5013ec8c3ac6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  gamePaymentAddress: 0xC1722279Dfdf4cEc81c7FA87e530D5c81994D5d4
-  usdcAddress: 0x3600000000000000000000000000000000000000
-  gatewayAddress: 0x0077777d7EBA4688BDeF3E311b846F25870A19B9
 --- !u!1 &895805956752982653
 GameObject:
   m_ObjectHideFlags: 0
