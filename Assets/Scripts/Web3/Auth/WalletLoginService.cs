@@ -29,6 +29,14 @@ namespace ArcTrading.Auth
     /// </summary>
     public class WalletLoginService : Singleton<WalletLoginService>
     {
+        [Header("Login page on-chain data")]
+        [Tooltip("GamePayment contract — drives the GameItems price chart and NPC vault valuation on the login page.")]
+        [SerializeField] private string gamePaymentAddress = "0xc7C9BBCe60802c94AfB7e224e98928A4Ee0de158";
+        [Tooltip("ARC USDC token — used to read each NPC TBA's USDC balance for the leaderboard.")]
+        [SerializeField] private string usdcAddress = "0x3600000000000000000000000000000000000000";
+        [Tooltip("Circle Gateway Wallet — read totalBalance(usdc, paymentWallet) per NPC for the leaderboard's 'Gateway' column.")]
+        [SerializeField] private string gatewayAddress = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9";
+
         public WalletSession Current { get; private set; }
         public bool HasSession => Current != null && Current.IsValidNow();
 
@@ -112,7 +120,14 @@ namespace ArcTrading.Auth
             inflight = new TaskCompletionSource<WalletSession>(TaskCreationOptions.RunContinuationsAsynchronously);
             try
             {
-                var server = new WalletLoginServer(siweStatement, cachedChainId, sessionTtl, persistentBridge);
+                var npcContract = GetComponent<NpcCharacterContractClient>();
+                var server = new WalletLoginServer(
+                    siweStatement, cachedChainId, sessionTtl, persistentBridge,
+                    rpcUrl: npcContract != null ? npcContract.RpcUrl : string.Empty,
+                    gamePaymentAddress: gamePaymentAddress ?? string.Empty,
+                    npcCharacterAddress: npcContract != null ? npcContract.NftContractAddress : string.Empty,
+                    usdcAddress: usdcAddress ?? string.Empty,
+                    gatewayAddress: gatewayAddress ?? string.Empty);
                 server.Start(preferredPort);
                 activeServer = server;
 
