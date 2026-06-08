@@ -757,10 +757,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  contractAddress: 0xc7C9BBCe60802c94AfB7e224e98928A4Ee0de158
+  contractAddress: 0xC1722279Dfdf4cEc81c7FA87e530D5c81994D5d4
   privateKey: 
-  initialUsdcCapital: 7
-  nftTokenId: 2
+  initialUsdcCapital: 5
+  nftTokenId: 0
   npcPaymentWalletService: {fileID: 0}
   useBoundWalletAsTrader: 1
 --- !u!114 &4129621925378898866
@@ -819,6 +819,11 @@ MonoBehaviour:
   marketPoint: {fileID: 0}
   shopPoint: {fileID: 0}
   homePoint: {fileID: 0}
+  maxInitAttempts: 5
+  initBaseBackoffSeconds: 2
+  initMaxBackoffSeconds: 30
+  initStepTimeoutSeconds: 20
+  fallbackBackgroundRetryIntervalSeconds: 60
 --- !u!114 &5474049668140110154
 MonoBehaviour:
   m_ObjectHideFlags: 0
