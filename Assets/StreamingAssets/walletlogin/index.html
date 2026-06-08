@@ -18,26 +18,41 @@
       --accent: #66b2ff;
       --ok: #5cd197;
       --err: #ff7a7a;
+      --gold: #ffd166;
     }
     html, body {
       margin: 0;
-      height: 100%;
+      min-height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       background: var(--bg);
       color: var(--fg);
     }
     main {
-      max-width: 480px;
+      max-width: 720px;
       margin: 0 auto;
-      padding: 48px 24px 24px;
+      padding: 36px 20px 40px;
     }
     h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: .2px; }
-    .sub { color: var(--muted); margin-bottom: 28px; font-size: 14px; }
+    h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .2px; }
+    .sub { color: var(--muted); margin-bottom: 24px; font-size: 14px; }
     .panel {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 20px;
+      padding: 18px 20px;
+    }
+    .panel + .panel { margin-top: 16px; }
+    .panel-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .panel-header .meta {
+      color: var(--muted);
+      font-size: 12px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
     }
     .row + .row { margin-top: 14px; }
     label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
@@ -62,6 +77,13 @@
     button.primary { background: var(--accent); border-color: var(--accent); color: #061322; }
     button.primary:hover:not(:disabled) { background: #82c0ff; }
     button:disabled { opacity: .5; cursor: not-allowed; }
+    button.toggle {
+      width: auto;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 6px;
+    }
     .actions { margin-top: 20px; display: grid; gap: 10px; }
     .status { margin-top: 18px; font-size: 13px; min-height: 18px; }
     .status.ok { color: var(--ok); }
@@ -69,6 +91,73 @@
     .status.info { color: var(--muted); }
     code { font-family: ui-monospace, Menlo, monospace; }
     a { color: var(--accent); }
+
+    /* Leaderboard */
+    table.leaderboard {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    table.leaderboard th, table.leaderboard td {
+      text-align: left;
+      padding: 7px 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    table.leaderboard td.num,
+    table.leaderboard th.num { padding-left: 4px; padding-right: 4px; }
+    table.leaderboard th {
+      color: var(--muted);
+      font-weight: 500;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+    }
+    table.leaderboard td.num,
+    table.leaderboard th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    table.leaderboard td.mono { font-family: ui-monospace, Menlo, monospace; }
+    table.leaderboard tr.rank-1 td.rank { color: var(--gold); font-weight: 700; }
+    table.leaderboard tr.rank-2 td.rank { color: #d8d8d8; font-weight: 700; }
+    table.leaderboard tr.rank-3 td.rank { color: #c98e63; font-weight: 700; }
+    table.leaderboard tr:last-child td { border-bottom: 0; }
+    .empty {
+      padding: 16px 4px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    /* Price chart */
+    #price-chart-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 680 / 240;
+    }
+    #price-chart { width: 100%; height: 100%; display: block; }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 16px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .legend .swatch {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .chart-controls {
+      display: flex;
+      gap: 6px;
+    }
+    .chart-controls button.toggle.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #061322;
+    }
   </style>
 </head>
 <body>
@@ -97,9 +186,37 @@
 
       <div id="status" class="status info">Detecting wallet…</div>
     </section>
+
+    <section class="panel" id="leaderboard-panel">
+      <div class="panel-header">
+        <h2>NPC Wealth Leaderboard</h2>
+        <span class="meta" id="leaderboard-meta">—</span>
+      </div>
+      <div id="leaderboard-body">
+        <div class="empty">Loading on-chain NPCs…</div>
+      </div>
+    </section>
+
+    <section class="panel" id="prices-panel">
+      <div class="panel-header">
+        <h2>GameItems Price Trend</h2>
+        <div class="chart-controls">
+          <button class="toggle active" data-mode="buy">Buy</button>
+          <button class="toggle" data-mode="sell">Sell</button>
+        </div>
+      </div>
+      <div id="price-chart-wrap">
+        <canvas id="price-chart" width="680" height="240"></canvas>
+      </div>
+      <div class="legend" id="price-legend"></div>
+      <div class="meta" id="prices-meta" style="margin-top:8px;color:var(--muted);font-size:12px;">—</div>
+    </section>
   </main>
 
   <script type="module">
+    // ethers v6 — only what we use is tree-shaken.
+    import { JsonRpcProvider, Contract, ZeroAddress, formatUnits } from "https://esm.sh/ethers@6.13.4";
+
     // ----- read injected server config -----
     const cfgEl = document.querySelector('meta[name="login-config"]');
     const cfg = JSON.parse(cfgEl?.getAttribute('content') ?? '{}');
@@ -298,6 +415,11 @@
       return s.length > 14 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s;
     }
 
+    function shortenAddr(s) {
+      if (!s) return '';
+      return s.length > 12 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s;
+    }
+
     function sleep(ms) {
       return new Promise(r => setTimeout(r, ms));
     }
@@ -327,6 +449,428 @@
       for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
       return hex;
     }
+
+    // ====================================================================
+    //  Public on-chain panels: NPC wealth leaderboard + items price chart.
+    //  Both run against cfg.rpcUrl with no wallet required.
+    // ====================================================================
+
+    const SERIES_COLORS = ['#66b2ff', '#5cd197', '#ffd166', '#ff7a7a', '#c98aff'];
+    const ITEMS_ABI = [
+      "function getItemIds() view returns (uint256[5])",
+      "function getAllBuyPrices() view returns (uint256[5])",
+      "function getAllSellPrices() view returns (uint256[5])",
+      "function npcTba(uint256 tokenId) view returns (address)",
+      "function getTbaItemBalances(address tba) view returns (uint256[5] ids, uint256[5] balances)"
+    ];
+    const NPC_ABI = [
+      "function nextTokenId() view returns (uint256)",
+      "function ownerOf(uint256 tokenId) view returns (address)",
+      "function getNpc(uint256 tokenId) view returns (tuple(string npcName, string metadataURI, uint8 archetype, uint8 riskLevel, uint16 level, uint32 reputation, tuple(uint16 livingNeedsWeightBps, uint16 reserveWeightBps, uint16 tradingWeightBps, uint64 minimumLivingBudgetUSDC, uint64 minimumReserveBudgetUSDC, uint32 rebalanceIntervalSeconds, uint32 chainActionCooldownSeconds, uint64 minTradeUSDC, uint64 maxTradeUSDC) portfolio))",
+      "function getPaymentBinding(uint256 tokenId) view returns (address wallet, uint64 version)"
+    ];
+    const ERC20_ABI = [
+      "function balanceOf(address account) view returns (uint256)"
+    ];
+    // Circle Gateway Wallet — only the read fn we need.
+    const GATEWAY_ABI = [
+      "function totalBalance(address token, address depositor) view returns (uint256)"
+    ];
+
+    const ARCHETYPE_LABEL = ['ConservativeSaver', 'BalancedTrader', 'AggressiveSpeculator'];
+    const MAX_LEADERBOARD_NPCS = 50;   // hard cap on the scan window
+    const TOP_N = 10;
+    const PRICE_POLL_MS = 15_000;
+    const LEADERBOARD_POLL_MS = 60_000;
+    const PRICE_HISTORY_KEY = 'arctrading.priceHistory.v1';
+    const PRICE_HISTORY_MAX_SAMPLES = 120;   // ~30 min at 15s cadence
+
+    let chainProvider = null;
+    let chartMode = 'buy';      // 'buy' | 'sell'
+    let priceHistory = loadPriceHistory();
+
+    function loadPriceHistory() {
+      try {
+        const raw = localStorage.getItem(PRICE_HISTORY_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.slice(-PRICE_HISTORY_MAX_SAMPLES);
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function savePriceHistory() {
+      try {
+        localStorage.setItem(PRICE_HISTORY_KEY, JSON.stringify(priceHistory));
+      } catch (_) { /* quota exceeded — drop silently */ }
+    }
+
+    function getProvider() {
+      if (!chainProvider) {
+        if (!cfg.rpcUrl) return null;
+        chainProvider = new JsonRpcProvider(cfg.rpcUrl, undefined, { staticNetwork: true });
+      }
+      return chainProvider;
+    }
+
+    // ----- price chart -----
+    async function pollPricesOnce() {
+      const provider = getProvider();
+      if (!provider || !cfg.gamePaymentAddress) {
+        document.getElementById('prices-panel').style.display = 'none';
+        return;
+      }
+      const game = new Contract(cfg.gamePaymentAddress, ITEMS_ABI, provider);
+      let ids, buy, sell;
+      try {
+        [ids, buy, sell] = await Promise.all([
+          game.getItemIds(),
+          game.getAllBuyPrices(),
+          game.getAllSellPrices()
+        ]);
+      } catch (err) {
+        console.error('[prices] poll failed', err);
+        document.getElementById('prices-meta').textContent = `RPC error: ${err?.shortMessage ?? err?.message ?? err}`;
+        return;
+      }
+
+      const sample = {
+        t: Date.now(),
+        ids: ids.map(x => x.toString()),
+        buy: buy.map(x => Number(formatUnits(x, 6))),
+        sell: sell.map(x => Number(formatUnits(x, 6)))
+      };
+      // De-dupe against the last sample when nothing changed (rare — usually they
+      // shift every block due to circulatingSupply math).
+      const last = priceHistory[priceHistory.length - 1];
+      const same = last
+        && JSON.stringify(last.buy) === JSON.stringify(sample.buy)
+        && JSON.stringify(last.sell) === JSON.stringify(sample.sell);
+      if (!same) {
+        priceHistory.push(sample);
+        if (priceHistory.length > PRICE_HISTORY_MAX_SAMPLES) {
+          priceHistory.splice(0, priceHistory.length - PRICE_HISTORY_MAX_SAMPLES);
+        }
+        savePriceHistory();
+      }
+      renderChart();
+      renderLegend(sample);
+      const ageSec = same ? Math.round((Date.now() - last.t) / 1000) : 0;
+      document.getElementById('prices-meta').textContent =
+        `${priceHistory.length} sample(s) · last update ${new Date(sample.t).toLocaleTimeString()}`
+        + (same ? ` (unchanged for ${ageSec}s)` : '');
+    }
+
+    function renderChart() {
+      const canvas = document.getElementById('price-chart');
+      const ctx = canvas.getContext('2d');
+      // Make canvas crisp on HiDPI.
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = canvas.clientWidth || canvas.width;
+      const cssH = canvas.clientHeight || canvas.height;
+      if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
+        canvas.width = Math.round(cssW * dpr);
+        canvas.height = Math.round(cssH * dpr);
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      if (priceHistory.length === 0) {
+        ctx.fillStyle = '#8b91a8';
+        ctx.font = '13px -apple-system, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Waiting for first price sample…', cssW / 2, cssH / 2);
+        return;
+      }
+
+      const padL = 48, padR = 12, padT = 12, padB = 24;
+      const plotW = cssW - padL - padR;
+      const plotH = cssH - padT - padB;
+
+      // Collect series values for the active mode.
+      const numItems = priceHistory[0][chartMode]?.length ?? 5;
+      let lo = Infinity, hi = -Infinity;
+      for (const s of priceHistory) {
+        for (const v of s[chartMode]) {
+          if (v < lo) lo = v;
+          if (v > hi) hi = v;
+        }
+      }
+      if (!isFinite(lo) || !isFinite(hi)) return;
+      if (lo === hi) { lo *= 0.95; hi *= 1.05; }
+      const range = hi - lo;
+      // Add 8% headroom each side.
+      const yLo = lo - range * 0.08;
+      const yHi = hi + range * 0.08;
+
+      const t0 = priceHistory[0].t;
+      const t1 = priceHistory[priceHistory.length - 1].t;
+      const tSpan = Math.max(1, t1 - t0);
+
+      // Grid + axis labels.
+      ctx.strokeStyle = '#242938';
+      ctx.fillStyle = '#8b91a8';
+      ctx.font = '11px ui-monospace, Menlo, monospace';
+      ctx.lineWidth = 1;
+      const gridLines = 4;
+      for (let i = 0; i <= gridLines; i++) {
+        const y = padT + (plotH * i / gridLines);
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(padL + plotW, y);
+        ctx.stroke();
+        const val = yHi - (yHi - yLo) * i / gridLines;
+        ctx.textAlign = 'right';
+        ctx.fillText(val.toFixed(val < 1 ? 4 : val < 100 ? 3 : 2), padL - 6, y + 3);
+      }
+      // x-axis time labels (start / mid / end)
+      ctx.textAlign = 'center';
+      const fmt = ts => {
+        const d = new Date(ts);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      };
+      ctx.fillText(fmt(t0), padL, cssH - 6);
+      ctx.fillText(fmt((t0 + t1) / 2), padL + plotW / 2, cssH - 6);
+      ctx.fillText(fmt(t1), padL + plotW, cssH - 6);
+
+      // Series.
+      ctx.lineWidth = 1.5;
+      for (let series = 0; series < numItems; series++) {
+        ctx.beginPath();
+        ctx.strokeStyle = SERIES_COLORS[series % SERIES_COLORS.length];
+        for (let i = 0; i < priceHistory.length; i++) {
+          const s = priceHistory[i];
+          const x = padL + (priceHistory.length === 1 ? plotW : plotW * (s.t - t0) / tSpan);
+          const v = s[chartMode][series];
+          const y = padT + plotH * (1 - (v - yLo) / (yHi - yLo));
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+    }
+
+    function renderLegend(sample) {
+      if (!sample) return;
+      const legendEl = document.getElementById('price-legend');
+      const items = sample[chartMode];
+      legendEl.innerHTML = '';
+      for (let i = 0; i < items.length; i++) {
+        const itemId = sample.ids[i];
+        const color = SERIES_COLORS[i % SERIES_COLORS.length];
+        const span = document.createElement('span');
+        span.innerHTML =
+          `<span class="swatch" style="background:${color}"></span>` +
+          `Item ${itemId}: <span style="color:var(--fg)">${items[i].toFixed(4)} USDC</span>`;
+        legendEl.appendChild(span);
+      }
+    }
+
+    document.querySelectorAll('.chart-controls button.toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        chartMode = btn.dataset.mode;
+        document.querySelectorAll('.chart-controls button.toggle').forEach(b => {
+          b.classList.toggle('active', b.dataset.mode === chartMode);
+        });
+        renderChart();
+        const last = priceHistory[priceHistory.length - 1];
+        if (last) renderLegend(last);
+      });
+    });
+
+    window.addEventListener('resize', () => renderChart());
+
+    // ----- leaderboard -----
+    async function pollLeaderboardOnce() {
+      const provider = getProvider();
+      const bodyEl = document.getElementById('leaderboard-body');
+      const metaEl = document.getElementById('leaderboard-meta');
+      if (!provider || !cfg.npcCharacterAddress || !cfg.gamePaymentAddress || !cfg.usdcAddress) {
+        document.getElementById('leaderboard-panel').style.display = 'none';
+        return;
+      }
+      const npc = new Contract(cfg.npcCharacterAddress, NPC_ABI, provider);
+      const game = new Contract(cfg.gamePaymentAddress, ITEMS_ABI, provider);
+      const usdc = new Contract(cfg.usdcAddress, ERC20_ABI, provider);
+      // Gateway is optional — if address is missing, the Gateway column reads as "—".
+      const gateway = cfg.gatewayAddress ? new Contract(cfg.gatewayAddress, GATEWAY_ABI, provider) : null;
+
+      let nextId, sellPrices;
+      try {
+        [nextId, sellPrices] = await Promise.all([
+          npc.nextTokenId(),
+          game.getAllSellPrices()
+        ]);
+      } catch (err) {
+        console.error('[leaderboard] init failed', err);
+        bodyEl.innerHTML = `<div class="empty">RPC error: ${err?.shortMessage ?? err?.message ?? err}</div>`;
+        return;
+      }
+
+      const total = Number(nextId) - 1;
+      if (total <= 0) {
+        bodyEl.innerHTML = `<div class="empty">No NPCs minted yet.</div>`;
+        metaEl.textContent = '0 scanned';
+        return;
+      }
+      const scanCount = Math.min(total, MAX_LEADERBOARD_NPCS);
+      metaEl.textContent = `scanning ${scanCount}/${total}…`;
+
+      const sellPriceNums = sellPrices.map(x => Number(formatUnits(x, 6)));
+
+      // Walk token ids serially (Arc RPC throttles parallel batches harshly);
+      // skip burned / non-existent tokenIds whose ownerOf reverts.
+      const rows = [];
+      let scanned = 0;
+      for (let id = 1; id <= scanCount; id++) {
+        scanned++;
+        let owner;
+        try { owner = await npc.ownerOf(id); }
+        catch (_) { continue; }
+        if (!owner || owner === ZeroAddress) continue;
+
+        let data, tba, binding;
+        try {
+          [data, tba, binding] = await Promise.all([
+            npc.getNpc(id),
+            game.npcTba(id),
+            npc.getPaymentBinding(id).catch(() => null)
+          ]);
+        } catch (err) {
+          console.warn(`[leaderboard] skip tokenId=${id}: ${err?.shortMessage ?? err?.message ?? err}`);
+          continue;
+        }
+
+        const paymentWallet = binding?.wallet ?? binding?.[0] ?? null;
+        const hasTba = tba && tba !== ZeroAddress;
+        const hasPaymentWallet = paymentWallet && paymentWallet !== ZeroAddress;
+
+        // Fire all four balance reads in parallel. Wrap each in allSettled-style
+        // try/catch so one revert doesn't drop the rest.
+        const [tbaUsdcBal, vault, paymentUsdcBal, gatewayBal] = await Promise.all([
+          hasTba
+            ? usdc.balanceOf(tba).catch(() => 0n)
+            : Promise.resolve(0n),
+          hasTba
+            ? game.getTbaItemBalances(tba).catch(() => null)
+            : Promise.resolve(null),
+          hasPaymentWallet
+            ? usdc.balanceOf(paymentWallet).catch(() => 0n)
+            : Promise.resolve(0n),
+          (gateway && hasPaymentWallet)
+            ? gateway.totalBalance(cfg.usdcAddress, paymentWallet).catch(() => 0n)
+            : Promise.resolve(0n)
+        ]);
+
+        const tbaUsdcNum = Number(formatUnits(tbaUsdcBal, 6));
+        const paymentUsdcNum = Number(formatUnits(paymentUsdcBal, 6));
+        const gatewayUsdcNum = Number(formatUnits(gatewayBal, 6));
+        const balances = vault?.balances ?? vault?.[1] ?? [0n, 0n, 0n, 0n, 0n];
+        let vaultNum = 0;
+        for (let i = 0; i < balances.length; i++) {
+          vaultNum += Number(balances[i]) * (sellPriceNums[i] ?? 0);
+        }
+        rows.push({
+          id,
+          name: data.npcName || `NPC #${id}`,
+          archetype: ARCHETYPE_LABEL[data.archetype] ?? `arch-${data.archetype}`,
+          level: Number(data.level ?? 0),
+          owner,
+          tba,
+          paymentWallet,
+          tbaUsdc: tbaUsdcNum,
+          gatewayUsdc: gatewayUsdcNum,
+          paymentUsdc: paymentUsdcNum,
+          vault: vaultNum,
+          total: tbaUsdcNum + gatewayUsdcNum + paymentUsdcNum + vaultNum
+        });
+        if (scanned % 5 === 0) metaEl.textContent = `scanned ${scanned}/${scanCount}…`;
+      }
+
+      rows.sort((a, b) => b.total - a.total);
+      const top = rows.slice(0, TOP_N);
+      renderLeaderboard(top, { scanned, total, gatewayConfigured: !!gateway });
+    }
+
+    function renderLeaderboard(rows, info) {
+      const bodyEl = document.getElementById('leaderboard-body');
+      const metaEl = document.getElementById('leaderboard-meta');
+      metaEl.textContent =
+        `${rows.length} ranked · ${info.scanned}/${info.total} tokenIds`
+        + (info.total > MAX_LEADERBOARD_NPCS ? ` (capped at ${MAX_LEADERBOARD_NPCS})` : '');
+
+      if (rows.length === 0) {
+        bodyEl.innerHTML = `<div class="empty">No NPCs found in the scan range.</div>`;
+        return;
+      }
+
+      // Columns are intentionally tight — TBA/Gateway/Payment/Vault/Total all use
+      // 4-decimal precision unless the value crosses 100 USDC where 2-decimal
+      // becomes easier to scan.
+      const fmtUsdc = v => v.toFixed(v >= 100 ? 2 : 4);
+      const gatewayHeader = info.gatewayConfigured ? 'Gateway' : 'Gateway<sup>*</sup>';
+      const html = [
+        '<table class="leaderboard">',
+        '<thead><tr>',
+        '<th class="num">#</th>',
+        '<th>NPC</th>',
+        '<th class="num" title="USDC sitting in the NPC TBA (where x402-minted loot lands).">TBA</th>',
+        `<th class="num" title="Circle Gateway Wallet deposit keyed by the bound paymentWallet (used to fund x402).">${gatewayHeader}</th>`,
+        '<th class="num" title="Plain ERC20 USDC at the bound paymentWallet EOA (not yet deposited into the Gateway).">Pay</th>',
+        '<th class="num" title="NPC inventory marked at the contract\'s buyback price (Σ items × getSellPrice).">Vault</th>',
+        '<th class="num">Total</th>',
+        '</tr></thead><tbody>'
+      ];
+      rows.forEach((r, i) => {
+        const rank = i + 1;
+        const subline = `#${r.id} · ${r.archetype} · L${r.level} · owner ${shortenAddr(r.owner)}`;
+        html.push(
+          `<tr class="rank-${rank}">`,
+          `<td class="rank num">${rank}</td>`,
+          `<td><div>${escapeHtml(r.name)}</div>` +
+            `<div style="color:var(--muted);font-size:11px">${escapeHtml(subline)}</div></td>`,
+          `<td class="num">${fmtUsdc(r.tbaUsdc)}</td>`,
+          `<td class="num">${fmtUsdc(r.gatewayUsdc)}</td>`,
+          `<td class="num">${fmtUsdc(r.paymentUsdc)}</td>`,
+          `<td class="num">${fmtUsdc(r.vault)}</td>`,
+          `<td class="num" style="font-weight:600">${fmtUsdc(r.total)}</td>`,
+          `</tr>`
+        );
+      });
+      html.push('</tbody></table>');
+      if (!info.gatewayConfigured) {
+        html.push('<div style="color:var(--muted);font-size:11px;margin-top:6px">' +
+          '<sup>*</sup>Gateway address not injected — column shows 0.</div>');
+      }
+      bodyEl.innerHTML = html.join('');
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    // ----- kick off -----
+    (async function bootDashboard() {
+      if (!cfg.rpcUrl) {
+        document.getElementById('leaderboard-panel').style.display = 'none';
+        document.getElementById('prices-panel').style.display = 'none';
+        return;
+      }
+      // Render whatever is cached before we have fresh data.
+      const lastCached = priceHistory[priceHistory.length - 1];
+      if (lastCached) { renderChart(); renderLegend(lastCached); }
+
+      await Promise.allSettled([pollPricesOnce(), pollLeaderboardOnce()]);
+      setInterval(pollPricesOnce, PRICE_POLL_MS);
+      setInterval(pollLeaderboardOnce, LEADERBOARD_POLL_MS);
+    })();
   </script>
 </body>
 </html>

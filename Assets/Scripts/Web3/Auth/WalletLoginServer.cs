@@ -33,6 +33,16 @@ namespace ArcTrading.Auth
         private readonly TimeSpan challengeTtl = TimeSpan.FromMinutes(10);
         private readonly bool persistentBridge;
 
+        // Surfaced to the login page so it can render the public leaderboard /
+        // price-chart panels without needing its own RPC config. All four are
+        // strings (addresses + URL) and may be empty — the page hides the
+        // dependent panel if any of them are missing.
+        private readonly string rpcUrl;
+        private readonly string gamePaymentAddress;
+        private readonly string npcCharacterAddress;
+        private readonly string usdcAddress;
+        private readonly string gatewayAddress;
+
         private HttpListener listener;
         private string boundOrigin;          // e.g. "http://127.0.0.1:7777"
         private int boundPort;
@@ -66,12 +76,20 @@ namespace ArcTrading.Auth
                 ? double.PositiveInfinity
                 : (DateTimeOffset.UtcNow - lastBridgePoll).TotalSeconds;
 
-        public WalletLoginServer(string statement, long chainId, TimeSpan sessionTtl, bool persistentBridge)
+        public WalletLoginServer(string statement, long chainId, TimeSpan sessionTtl, bool persistentBridge,
+            string rpcUrl = "", string gamePaymentAddress = "",
+            string npcCharacterAddress = "", string usdcAddress = "",
+            string gatewayAddress = "")
         {
             this.statement = string.IsNullOrEmpty(statement) ? "Sign in to ArcTrading" : statement;
             this.chainId = chainId;
             this.sessionTtl = sessionTtl;
             this.persistentBridge = persistentBridge;
+            this.rpcUrl = rpcUrl ?? string.Empty;
+            this.gamePaymentAddress = gamePaymentAddress ?? string.Empty;
+            this.npcCharacterAddress = npcCharacterAddress ?? string.Empty;
+            this.usdcAddress = usdcAddress ?? string.Empty;
+            this.gatewayAddress = gatewayAddress ?? string.Empty;
         }
 
         public void Start(int preferredPort)
@@ -255,7 +273,12 @@ namespace ArcTrading.Auth
                 $"\"authEndpoint\":\"/auth\"," +
                 $"\"bridgeMode\":{(persistentBridge ? "true" : "false")}," +
                 $"\"txNextEndpoint\":\"/tx-next\"," +
-                $"\"txResultEndpoint\":\"/tx-result\"}}";
+                $"\"txResultEndpoint\":\"/tx-result\"," +
+                $"\"rpcUrl\":{JsonEncodeString(rpcUrl)}," +
+                $"\"gamePaymentAddress\":{JsonEncodeString(gamePaymentAddress)}," +
+                $"\"npcCharacterAddress\":{JsonEncodeString(npcCharacterAddress)}," +
+                $"\"usdcAddress\":{JsonEncodeString(usdcAddress)}," +
+                $"\"gatewayAddress\":{JsonEncodeString(gatewayAddress)}}}";
             var rendered = html.Replace("__LOGIN_CONFIG__", HtmlAttrEncode(configJson));
 
             await WriteBytes(ctx, 200, "text/html; charset=utf-8", Encoding.UTF8.GetBytes(rendered)).ConfigureAwait(false);

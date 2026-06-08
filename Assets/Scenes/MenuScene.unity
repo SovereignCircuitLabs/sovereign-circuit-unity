@@ -328,7 +328,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.53333336, g: 1, b: 0.9360145, a: 1}
+  m_Color: {r: 0.15828082, g: 0.9496855, b: 0.84327817, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -392,8 +392,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0}
   m_AnchorMax: {x: 0.5, y: 0}
-  m_AnchoredPosition: {x: -0, y: -50.67089}
-  m_SizeDelta: {x: 1077.3215, y: 175.45038}
+  m_AnchoredPosition: {x: -0.000022888184, y: -57}
+  m_SizeDelta: {x: 1164.6426, y: 175.4504}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &373423148
 MonoBehaviour:
@@ -443,7 +443,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "POWERED BY\r\nArc \xB7 Unity \xB7 ERC6551 \xB7 x402 \xB7 Circle"
+  m_Text: "POWERED BY\r\nCircle \xB7 Arc \xB7 Unity \xB7 ERC6551 \xB7 x402 Nanopayments"
 --- !u!222 &373423150
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -721,7 +721,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.6650944, g: 0.909851, b: 1, a: 1}
+  m_Color: {r: 0.12893075, g: 0.4433976, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -1339,7 +1339,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.9748555, g: 1, b: 0.5330188, a: 1}
+  m_Color: {r: 1, g: 0.61578095, b: 0, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -1529,7 +1529,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.75956744, g: 0.9528302, b: 0.8397445, a: 1}
+  m_Color: {r: 0.32589686, g: 0.9685534, b: 0.5882057, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
