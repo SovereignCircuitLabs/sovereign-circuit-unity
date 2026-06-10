@@ -3,7 +3,7 @@
 **Language / 语言 / 語言**:
 [English](#english) ｜ [简体中文](#简体中文) ｜ [繁體中文](#繁體中文)
 
-- Unity Client (this repo): https://github.com/SovereignCircuitLabs/sovereign-circuit-unity/tree/main
+- Unity Client (this repo): https://github.com/SovereignCircuitLabs/sovereign-circuit-unity
 - Smart Contracts: https://github.com/SovereignCircuitLabs/sovereign-circuit-contracts
 - x402 Seller Server: https://github.com/SovereignCircuitLabs/sovereign-circuit-server
 
