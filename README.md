@@ -3,9 +3,9 @@
 **Language / 语言 / 語言**:
 [English](#english) ｜ [简体中文](#简体中文) ｜ [繁體中文](#繁體中文)
 
-- Unity Client (this repo): https://github.com/NPCs-Agent-Economy-System/Arc-Chain-Economy-System
-- Smart Contracts: https://github.com/RCrobotcat/Arc-Chain-Game-Payment
-- x402 Seller Server: https://github.com/NPCs-Agent-Economy-System/Arc-Chain-x402-Seller
+- Unity Client (this repo): https://github.com/SovereignCircuitLabs/sovereign-circuit-unity/tree/main
+- Smart Contracts: https://github.com/SovereignCircuitLabs/sovereign-circuit-contracts
+- x402 Seller Server: https://github.com/SovereignCircuitLabs/sovereign-circuit-server
 
 ---
 
@@ -27,7 +27,7 @@ The system models a closed economic loop:
 
 > Player logs in wallet → NPC NFTs are enumerated → NPCs spawn → NPCs trade autonomously → x402 micropayments settle via Circle Gateway → ERC-1155 items mint into NPC TBAs → NPC NFT value grows → players buy/sell NPCs on the marketplace.
 
-For background notes see the design documents under `Personal_Notes/项目记录/web3/Arc/NpcEconomy/` (Obsidian vault).
+**TBA vs Payment Wallet.** Each NPC is backed by two distinct on-chain artifacts. The **TBA (ERC-6551 Token Bound Account)** is the NPC's asset-custody smart-contract wallet — deterministically derived from the NFT, it holds that NPC's USDC and ERC-1155 inventory, and ownership transfers automatically whenever the NFT is sold. The **Payment Wallet** is a separate off-chain EOA, generated locally and registered on-chain via `bindPaymentWallet(tokenId, addr)`; it is used solely to sign EIP-3009 `transferWithAuthorization` messages so the NPC can spend from the shared Circle Gateway Wallet for x402 nanopayments. It carries no assets, can be rotated/revoked by the NFT owner, and is automatically cleared on any NFT transfer.
 
 ### 2. Tech Stack
 
@@ -60,7 +60,7 @@ For background notes see the design documents under `Personal_Notes/项目记录
 #### 3.2 Step 1 — Start the x402 Seller server
 
 ```bash
-# Repo: https://github.com/NPCs-Agent-Economy-System/Arc-Chain-x402-Seller
+# Repo: https://github.com/SovereignCircuitLabs/sovereign-circuit-server
 cd <path-to>/unity_nanopayments_server
 
 # Install deps
@@ -100,24 +100,14 @@ curl -i http://localhost:4021/item/1     # should return HTTP/1.1 402 Payment Re
 - On Play the runtime auto-spawns `WalletLoginBootstrap`, opens the default browser to `http://127.0.0.1:7777/login`.
 - Click **Connect Wallet** → MetaMask asks for accounts.
 - Click **Sign In** → MetaMask shows a human-readable SIWE message → Sign.
-- The browser tab displays `Bridge active — keep this tab open while playing.` **Do not close it** — Unity will route every owner-side write transaction (`bindPaymentWallet`, `USDC.transfer`, `TBA.execute`, …) through this tab.
+- The browser tab displays `Bridge active — keep this tab open while playing.` **Do not close it** — Unity will route every owner-side write transaction (`bindPaymentWallet`, `USDC.transfer`, …) through this tab.
 
 #### 3.5 Step 4 — NPC spawn & economy loop
 
 - Unity reads the NPC NFTs owned by the connected wallet, spawns the matching prefabs (Aggressive / Balanced / Conservative).
 - Each NPC initializes its **payment wallet** (`NpcPaymentWalletService.EnsureBoundOrRebindAsync`) — first run will trigger one MetaMask confirmation per NPC to `bindPaymentWallet(tokenId, addr)`.
 - After binding the NPCs run autonomously: rebalance → consume → trade → buy ERC-1155 items via x402.
-- The `MacroEconomyAgent` (toggle the panel with **F8**) periodically polls the LLM and adjusts world event modifiers.
-
-#### 3.6 Quick troubleshooting
-
-| Symptom | Likely cause |
-| --- | --- |
-| `connect ECONNREFUSED 127.0.0.1:4021` | Seller server not running — repeat **Step 1** |
-| Browser tab never opens | Port 7777 occupied; check console for `listening on http://127.0.0.1:7778` |
-| `Insufficient Gateway balance` | Run `npm run deposit -- 1` again in the seller dir |
-| `signature mismatch` on `/auth` | MetaMask signed with a different account than the one shown in the SIWE message |
-| NPC stuck in "binding" | Confirm/Reject the MetaMask popup in the bridge tab |
+- The `MacroEconomyAgent` (toggle the panel with **Tab**) periodically polls the LLM and adjusts world event modifiers.
 
 ---
 
@@ -139,7 +129,7 @@ curl -i http://localhost:4021/item/1     # should return HTTP/1.1 402 Payment Re
 
 > 玩家钱包登录 → 枚举链上 NPC NFT → 动态生成 NPC → NPC 自主交易 → x402 微支付通过 Circle Gateway 结算 → ERC-1155 物品铸造进 NPC TBA → NPC 财富增长 → NPC NFT 在二级市场被买卖
 
-更详细的设计文档放在 Obsidian 笔记 `Personal_Notes/项目记录/web3/Arc/NpcEconomy/` 下。
+**TBA 与 PaymentWallet 的区别。** 每个 NPC 在链上同时对应两个完全不同的实体。**TBA（ERC-6551 Token Bound Account）** 是 NPC 的资产托管智能合约钱包——由 NFT 确定性派生而来，用于持有该 NPC 的 USDC 和 ERC-1155 道具库存，NFT 被卖出时其所有权随 NFT 自动转移。**PaymentWallet** 则是另一个本地生成的链下 EOA，通过 `bindPaymentWallet(tokenId, addr)` 注册到链上；它只负责对 EIP-3009 `transferWithAuthorization` 消息签名，从而让 NPC 能够动用共享的 Circle Gateway Wallet 完成 x402 微支付。它本身不持有任何资产，可由 NFT 持有人随时轮换 / 吊销，并且在 NFT 发生任何转移时被自动清空。
 
 ### 2. 技术栈
 
@@ -172,7 +162,7 @@ curl -i http://localhost:4021/item/1     # should return HTTP/1.1 402 Payment Re
 #### 3.2 Step 1 — 启动 x402 Seller 服务器
 
 ```bash
-# 仓库：https://github.com/NPCs-Agent-Economy-System/Arc-Chain-x402-Seller
+# 仓库：https://github.com/SovereignCircuitLabs/sovereign-circuit-server
 cd <你的路径>/unity_nanopayments_server
 
 # 安装依赖
@@ -212,24 +202,14 @@ curl -i http://localhost:4021/item/1     # 应返回 HTTP/1.1 402 Payment Requir
 - 进入 Play 后，运行时会自动 spawn `WalletLoginBootstrap`，并在默认浏览器中打开 `http://127.0.0.1:7777/login`。
 - 点 **Connect Wallet** → MetaMask 弹窗请求账户连接。
 - 点 **Sign In** → MetaMask 显示一段人类可读的 SIWE 消息 → 点 Sign 签名。
-- 浏览器随后显示 `Bridge active — keep this tab open while playing.` —— **不要关闭该标签页**，Unity 之后所有 owner 的写交易（`bindPaymentWallet`、`USDC.transfer`、`TBA.execute` …）都通过这个 tab 让 MetaMask 签名。
+- 浏览器随后显示 `Bridge active — keep this tab open while playing.` —— **不要关闭该标签页**，Unity 之后所有 owner 的写交易（`bindPaymentWallet`、`USDC.transfer` …）都通过这个 tab 让 MetaMask 签名。
 
 #### 3.5 Step 4 — NPC 生成与经济循环
 
 - Unity 会读取当前钱包持有的 NPC NFT，动态生成对应的 NPC 预制体（Aggressive / Balanced / Conservative）。
 - 每个 NPC 初始化时会调用 `NpcPaymentWalletService.EnsureBoundOrRebindAsync` —— 首次运行会为每个 NPC 弹一次 `bindPaymentWallet(tokenId, addr)` 的 MetaMask 确认。
 - 绑定完成后，NPC 进入自治循环：重平衡 → 消费 → 链上交易 → 通过 x402 购买 ERC-1155 物品。
-- 按 **F8** 打开 `MacroEconomyAgent` 控制面板，可以看到 LLM 周期性输出策略并改写全局事件乘数。
-
-#### 3.6 常见问题
-
-| 现象 | 可能原因 |
-| --- | --- |
-| `connect ECONNREFUSED 127.0.0.1:4021` | Seller 服务器没启动，回到 **Step 1** |
-| 浏览器一直不弹 | 7777 被占用，查看 Console 是否换成了 `http://127.0.0.1:7778` |
-| `Insufficient Gateway balance` | 在 seller 目录再跑一次 `npm run deposit -- 1` |
-| `/auth` 报 `signature mismatch` | MetaMask 当前选中的账户和 SIWE 消息里的地址不一致 |
-| NPC 一直卡在 "binding" | 去 bridge 标签页确认/拒绝 MetaMask 弹窗 |
+- 按 **Tab** 打开 `MacroEconomyAgent` 控制面板，可以看到 LLM 周期性输出策略并改写全局事件乘数。
 
 ---
 
@@ -251,7 +231,7 @@ curl -i http://localhost:4021/item/1     # 应返回 HTTP/1.1 402 Payment Requir
 
 > 玩家錢包登入 → 列舉鏈上 NPC NFT → 動態生成 NPC → NPC 自主交易 → x402 微支付透過 Circle Gateway 結算 → ERC-1155 物品鑄造進 NPC TBA → NPC 財富增長 → NPC NFT 於二級市場被買賣
 
-更詳細的設計文件放在 Obsidian 筆記 `Personal_Notes/项目记录/web3/Arc/NpcEconomy/` 之下。
+**TBA 與 PaymentWallet 的差異。** 每個 NPC 在鏈上同時對應兩個完全不同的實體。**TBA（ERC-6551 Token Bound Account）** 是 NPC 的資產託管智能合約錢包——由 NFT 確定性派生而來，用於持有該 NPC 的 USDC 與 ERC-1155 道具庫存，NFT 被賣出時其所有權隨 NFT 自動轉移。**PaymentWallet** 則是另一個本地生成的鏈下 EOA，透過 `bindPaymentWallet(tokenId, addr)` 註冊到鏈上；它只負責對 EIP-3009 `transferWithAuthorization` 訊息簽名，藉此讓 NPC 能夠動用共享的 Circle Gateway Wallet 完成 x402 微支付。它本身不持有任何資產，可由 NFT 持有人隨時輪換 / 撤銷，並且在 NFT 發生任何轉移時被自動清空。
 
 ### 2. 技術堆疊
 
@@ -284,7 +264,7 @@ curl -i http://localhost:4021/item/1     # 应返回 HTTP/1.1 402 Payment Requir
 #### 3.2 Step 1 — 啟動 x402 Seller 伺服器
 
 ```bash
-# 倉庫：https://github.com/NPCs-Agent-Economy-System/Arc-Chain-x402-Seller
+# 倉庫：https://github.com/SovereignCircuitLabs/sovereign-circuit-server
 cd <你的路徑>/unity_nanopayments_server
 
 # 安裝相依套件
@@ -324,24 +304,14 @@ curl -i http://localhost:4021/item/1     # 應回傳 HTTP/1.1 402 Payment Requir
 - 進入 Play 後，Runtime 會自動 spawn `WalletLoginBootstrap`，並在預設瀏覽器開啟 `http://127.0.0.1:7777/login`。
 - 點 **Connect Wallet** → MetaMask 彈窗請求帳戶連線。
 - 點 **Sign In** → MetaMask 顯示一段人類可讀的 SIWE 訊息 → 點 Sign 簽名。
-- 瀏覽器隨後顯示 `Bridge active — keep this tab open while playing.` —— **請勿關閉該分頁**，Unity 之後所有 owner 的寫入交易（`bindPaymentWallet`、`USDC.transfer`、`TBA.execute` …）都會透過這個分頁讓 MetaMask 簽名。
+- 瀏覽器隨後顯示 `Bridge active — keep this tab open while playing.` —— **請勿關閉該分頁**，Unity 之後所有 owner 的寫入交易（`bindPaymentWallet`、`USDC.transfer`…）都會透過這個分頁讓 MetaMask 簽名。
 
 #### 3.5 Step 4 — NPC 生成與經濟循環
 
 - Unity 會讀取目前錢包持有的 NPC NFT，動態生成對應的 NPC 預製體（Aggressive / Balanced / Conservative）。
 - 每個 NPC 初始化時會呼叫 `NpcPaymentWalletService.EnsureBoundOrRebindAsync` —— 首次執行會為每個 NPC 跳一次 `bindPaymentWallet(tokenId, addr)` 的 MetaMask 確認。
 - 綁定完成後，NPC 進入自治循環：重平衡 → 消費 → 鏈上交易 → 透過 x402 購買 ERC-1155 物品。
-- 按 **F8** 開啟 `MacroEconomyAgent` 控制面板，可以看到 LLM 週期性輸出策略並改寫全域事件乘數。
-
-#### 3.6 常見問題
-
-| 現象 | 可能原因 |
-| --- | --- |
-| `connect ECONNREFUSED 127.0.0.1:4021` | Seller 伺服器尚未啟動，回到 **Step 1** |
-| 瀏覽器一直不彈出 | 7777 被佔用，請查看 Console 是否改成 `http://127.0.0.1:7778` |
-| `Insufficient Gateway balance` | 在 seller 目錄再跑一次 `npm run deposit -- 1` |
-| `/auth` 回報 `signature mismatch` | MetaMask 目前選中的帳戶和 SIWE 訊息中的位址不一致 |
-| NPC 一直卡在 "binding" | 請到 bridge 分頁確認/拒絕 MetaMask 彈窗 |
+- 按 **Tab** 開啟 `MacroEconomyAgent` 控制面板，可以看到 LLM 週期性輸出策略並改寫全域事件乘數。
 
 ---
 
