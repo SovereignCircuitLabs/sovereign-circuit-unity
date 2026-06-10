@@ -128,7 +128,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  pricingContractAddress: 0xfa2E87cd6d5D0a2885f9AA995a2d3B2392e22a8A
+  pricingContractAddress: 0x0EdAD6465c3e2ccB6e962F6a4BA51750daf5dD9a
 --- !u!114 &4634525112757679
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -142,7 +142,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  marketplaceContractAddress: 0xCcdc63B763298687B8c748B077cd707F26109894
+  marketplaceContractAddress: 0x914deB1880d78337eF64EbA1d3De9eF412bdAB7b
   usdcAddress: 0x3600000000000000000000000000000000000000
   npcCharacter: {fileID: 4663595905507844709}
   pricing: {fileID: 7753935226926194790}
@@ -164,7 +164,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  nftContractAddress: 0xF2E0566943ccf02211B083140FaA9d60c76A108F
+  nftContractAddress: 0xCe2BC17769fb7086ffa9a09918cA763b42264871
   nftOwnerPrivateKey: 
   loginViaAuth: 1
   bridgePreferredPort: 7777
@@ -545,7 +545,7 @@ RectTransform:
   m_Father: {fileID: 5063716055074869975}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
+  m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 20, y: 20}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -1028,8 +1028,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 126, y: -424}
-  m_SizeDelta: {x: -11.9097, y: -985.2172}
+  m_AnchoredPosition: {x: 126, y: -428.35968}
+  m_SizeDelta: {x: -11.9097, y: -970.685}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &884011274471021794
 CanvasRenderer:

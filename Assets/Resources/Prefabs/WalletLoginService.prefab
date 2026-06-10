@@ -44,7 +44,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dabf70b2095a5bc4fafa5013ec8c3ac6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gamePaymentAddress: 0xC1722279Dfdf4cEc81c7FA87e530D5c81994D5d4
+  gamePaymentAddress: 0x57596BB6ae8F42Efd0C7e6038b170Da272FD9bE8
   usdcAddress: 0x3600000000000000000000000000000000000000
   gatewayAddress: 0x0077777d7EBA4688BDeF3E311b846F25870A19B9
   npcContract: {fileID: 0}
