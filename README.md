@@ -34,7 +34,7 @@ The system models a closed economic loop:
 | Layer | Technology |
 | --- | --- |
 | Client / Game | Unity **2022.3.21f1**, URP, Fluid Behavior Tree, NavMesh, Steering Behaviors |
-| Web3 client | **Nethereum 5.0** (custom `WebGlUnityRpcClient` for transport isolation) |
+| Web3 client | **Nethereum 5.0** |
 | Blockchain | **Arc Testnet** (EVM compatible, chainId `5042002`), native USDC `0x3600…0000` |
 | Smart contracts | **Solidity** + **Foundry** (`forge` / `cast` / `anvil`) + OpenZeppelin |
 | NPC identity | **ERC-721** (`NpcCharacter`) + **ERC-6551** (`Registry` + `Account` impl, ERC-1167 minimal proxy via `CREATE2`) |
@@ -137,7 +137,7 @@ curl -i http://localhost:4021/item/1     # should return HTTP/1.1 402 Payment Re
 | 层级 | 技术 |
 | --- | --- |
 | 客户端 / 游戏 | Unity **2022.3.21f1**、URP、Fluid Behavior Tree、NavMesh、Steering Behaviors |
-| Web3 客户端 | **Nethereum 5.0**（WebGL 下额外封装了 `WebGlUnityRpcClient` 隔离传输层） |
+| Web3 客户端 | **Nethereum 5.0** |
 | 区块链 | **Arc Testnet**（EVM 兼容，chainId `5042002`），链原生 USDC `0x3600…0000` |
 | 智能合约 | **Solidity** + **Foundry**（`forge` / `cast` / `anvil`）+ OpenZeppelin |
 | NPC 身份 | **ERC-721**（`NpcCharacter`）+ **ERC-6551**（Registry + Account 实现，通过 `CREATE2` 部署 ERC-1167 极简代理） |
@@ -240,7 +240,7 @@ curl -i http://localhost:4021/item/1     # 应返回 HTTP/1.1 402 Payment Requir
 | 層級 | 技術 |
 | --- | --- |
 | 客戶端 / 遊戲 | Unity **2022.3.21f1**、URP、Fluid Behavior Tree、NavMesh、Steering Behaviors |
-| Web3 客戶端 | **Nethereum 5.0**（WebGL 下額外封裝了 `WebGlUnityRpcClient` 隔離傳輸層） |
+| Web3 客戶端 | **Nethereum 5.0** |
 | 區塊鏈 | **Arc Testnet**（EVM 相容，chainId `5042002`），鏈原生 USDC `0x3600…0000` |
 | 智能合約 | **Solidity** + **Foundry**（`forge` / `cast` / `anvil`）+ OpenZeppelin |
 | NPC 身份 | **ERC-721**（`NpcCharacter`）+ **ERC-6551**（Registry + Account 實作，透過 `CREATE2` 部署 ERC-1167 極簡代理） |
