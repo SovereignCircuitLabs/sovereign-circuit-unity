@@ -91,20 +91,21 @@ curl -i http://localhost:4021/item/1     # should return HTTP/1.1 402 Payment Re
 #### 3.3 Step 2 — Open the Unity project
 
 1. Open this folder in **Unity Hub** → Unity **2022.3.21f1**.
-2. Open the scene `Assets/Scenes/MainScene.unity`.
+2. Open the scene `Assets/Scenes/MenuScene.unity`.
 3. Verify `ArcNanopaymentClient.x402ServerBaseUrl == http://localhost:4021/item/` on the relevant prefab.
 4. Press **Play**.
 
-#### 3.4 Step 3 — Wallet login (browser pop-up)
+#### 3.4 Step 3 — Wallet login (browser pop-up) in MenuScene
 
-- On Play the runtime auto-spawns `WalletLoginBootstrap`, opens the default browser to `http://127.0.0.1:7777/login`.
+- On Play the MenuScene auto-spawns `WalletLoginBootstrap`, opens the default browser to `http://127.0.0.1:7777/login`.
 - Click **Connect Wallet** → MetaMask asks for accounts.
 - Click **Sign In** → MetaMask shows a human-readable SIWE message → Sign.
 - The browser tab displays `Bridge active — keep this tab open while playing.` **Do not close it** — Unity will route every owner-side write transaction (`bindPaymentWallet`, `USDC.transfer`, …) through this tab.
+- From the MenuScene you can open the **NPC Market** and the **project website** to buy an NPC (or skip this if your wallet already holds at least one NPC NFT). Only after the wallet holds ≥ 1 NPC NFT can you enter the **MainScene** to start playing.
 
 #### 3.5 Step 4 — NPC spawn & economy loop
 
-- Unity reads the NPC NFTs owned by the connected wallet, spawns the matching prefabs (Aggressive / Balanced / Conservative).
+- After entering MainScene, Unity reads the NPC NFTs owned by the connected wallet, spawns the matching prefabs (Aggressive / Balanced / Conservative).
 - Each NPC initializes its **payment wallet** (`NpcPaymentWalletService.EnsureBoundOrRebindAsync`) — first run will trigger one MetaMask confirmation per NPC to `bindPaymentWallet(tokenId, addr)`.
 - After binding the NPCs run autonomously: rebalance → consume → trade → buy ERC-1155 items via x402.
 - The `MacroEconomyAgent` (toggle the panel with **Tab**) periodically polls the LLM and adjusts world event modifiers.
@@ -193,20 +194,21 @@ curl -i http://localhost:4021/item/1     # 应返回 HTTP/1.1 402 Payment Requir
 #### 3.3 Step 2 — 打开 Unity 工程
 
 1. 在 **Unity Hub** 中用 Unity **2022.3.21f1** 打开当前目录。
-2. 打开场景 `Assets/Scenes/MainScene.unity`。
+2. 打开场景 `Assets/Scenes/MenuScene.unity`。
 3. 在相关 prefab 上确认 `ArcNanopaymentClient.x402ServerBaseUrl == http://localhost:4021/item/`。
 4. 点 **Play**。
 
-#### 3.4 Step 3 — 钱包登录（浏览器弹窗）
+#### 3.4 Step 3 — MenuScene 钱包登录（浏览器弹窗）
 
-- 进入 Play 后，运行时会自动 spawn `WalletLoginBootstrap`，并在默认浏览器中打开 `http://127.0.0.1:7777/login`。
+- 进入 Play 后，MenuScene 会自动 spawn `WalletLoginBootstrap`，并在默认浏览器中打开 `http://127.0.0.1:7777/login`。
 - 点 **Connect Wallet** → MetaMask 弹窗请求账户连接。
 - 点 **Sign In** → MetaMask 显示一段人类可读的 SIWE 消息 → 点 Sign 签名。
 - 浏览器随后显示 `Bridge active — keep this tab open while playing.` —— **不要关闭该标签页**，Unity 之后所有 owner 的写交易（`bindPaymentWallet`、`USDC.transfer` …）都通过这个 tab 让 MetaMask 签名。
+- 在 MenuScene 中可以打开 **NPC Market** 与 **项目官网**，购买 NPC（如果你的钱包里已经持有 NPC NFT 则可跳过此步）。**只有当钱包持有 ≥ 1 个 NPC NFT 时，才能进入 MainScene 正式开始游戏。**
 
 #### 3.5 Step 4 — NPC 生成与经济循环
 
-- Unity 会读取当前钱包持有的 NPC NFT，动态生成对应的 NPC 预制体（Aggressive / Balanced / Conservative）。
+- 进入 MainScene 后，Unity 会读取当前钱包持有的 NPC NFT，动态生成对应的 NPC 预制体（Aggressive / Balanced / Conservative）。
 - 每个 NPC 初始化时会调用 `NpcPaymentWalletService.EnsureBoundOrRebindAsync` —— 首次运行会为每个 NPC 弹一次 `bindPaymentWallet(tokenId, addr)` 的 MetaMask 确认。
 - 绑定完成后，NPC 进入自治循环：重平衡 → 消费 → 链上交易 → 通过 x402 购买 ERC-1155 物品。
 - 按 **Tab** 打开 `MacroEconomyAgent` 控制面板，可以看到 LLM 周期性输出策略并改写全局事件乘数。
@@ -295,20 +297,21 @@ curl -i http://localhost:4021/item/1     # 應回傳 HTTP/1.1 402 Payment Requir
 #### 3.3 Step 2 — 開啟 Unity 專案
 
 1. 在 **Unity Hub** 中用 Unity **2022.3.21f1** 開啟此目錄。
-2. 開啟場景 `Assets/Scenes/MainScene.unity`。
+2. 開啟場景 `Assets/Scenes/MenuScene.unity`。
 3. 在相關 prefab 上確認 `ArcNanopaymentClient.x402ServerBaseUrl == http://localhost:4021/item/`。
 4. 點 **Play**。
 
-#### 3.4 Step 3 — 錢包登入（瀏覽器彈窗）
+#### 3.4 Step 3 — MenuScene 錢包登入（瀏覽器彈窗）
 
-- 進入 Play 後，Runtime 會自動 spawn `WalletLoginBootstrap`，並在預設瀏覽器開啟 `http://127.0.0.1:7777/login`。
+- 進入 Play 後，MenuScene 會自動 spawn `WalletLoginBootstrap`，並在預設瀏覽器開啟 `http://127.0.0.1:7777/login`。
 - 點 **Connect Wallet** → MetaMask 彈窗請求帳戶連線。
 - 點 **Sign In** → MetaMask 顯示一段人類可讀的 SIWE 訊息 → 點 Sign 簽名。
 - 瀏覽器隨後顯示 `Bridge active — keep this tab open while playing.` —— **請勿關閉該分頁**，Unity 之後所有 owner 的寫入交易（`bindPaymentWallet`、`USDC.transfer`…）都會透過這個分頁讓 MetaMask 簽名。
+- 在 MenuScene 中可以開啟 **NPC Market** 與 **專案官網**，購買 NPC（若你的錢包已持有 NPC NFT 則可略過此步）。**只有當錢包持有 ≥ 1 個 NPC NFT 時，才能進入 MainScene 正式開始遊戲。**
 
 #### 3.5 Step 4 — NPC 生成與經濟循環
 
-- Unity 會讀取目前錢包持有的 NPC NFT，動態生成對應的 NPC 預製體（Aggressive / Balanced / Conservative）。
+- 進入 MainScene 後，Unity 會讀取目前錢包持有的 NPC NFT，動態生成對應的 NPC 預製體（Aggressive / Balanced / Conservative）。
 - 每個 NPC 初始化時會呼叫 `NpcPaymentWalletService.EnsureBoundOrRebindAsync` —— 首次執行會為每個 NPC 跳一次 `bindPaymentWallet(tokenId, addr)` 的 MetaMask 確認。
 - 綁定完成後，NPC 進入自治循環：重平衡 → 消費 → 鏈上交易 → 透過 x402 購買 ERC-1155 物品。
 - 按 **Tab** 開啟 `MacroEconomyAgent` 控制面板，可以看到 LLM 週期性輸出策略並改寫全域事件乘數。
