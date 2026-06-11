@@ -66,14 +66,6 @@ cd <path-to>/unity_nanopayments_server
 # Install deps
 npm install
 
-# One-time: generate CLIENT_PRIVATE_KEY / SERVER_PRIVATE_KEY / SERVER_ADDRESS
-npm run setup
-# → paste the printed values into .env
-
-# Fund CLIENT address with Arc Testnet USDC via https://faucet.circle.com
-# Then deposit USDC into the Circle Gateway Wallet (only needed once)
-npm run deposit -- 1     # deposits 1 USDC into Gateway
-
 # Start the paywalled API on :4021
 npm run server
 ```
@@ -169,14 +161,6 @@ cd <你的路径>/unity_nanopayments_server
 # 安装依赖
 npm install
 
-# 一次性：生成 CLIENT_PRIVATE_KEY / SERVER_PRIVATE_KEY / SERVER_ADDRESS
-npm run setup
-# → 把控制台输出的值粘到 .env
-
-# 用 https://faucet.circle.com 给 CLIENT 地址领 Arc Testnet USDC
-# 然后把 USDC 充值到 Circle Gateway Wallet（只需执行一次）
-npm run deposit -- 1     # 往 Gateway 充入 1 USDC
-
 # 启动付费 API，监听 4021 端口
 npm run server
 ```
@@ -271,14 +255,6 @@ cd <你的路徑>/unity_nanopayments_server
 
 # 安裝相依套件
 npm install
-
-# 一次性：產生 CLIENT_PRIVATE_KEY / SERVER_PRIVATE_KEY / SERVER_ADDRESS
-npm run setup
-# → 把控制台輸出的值貼到 .env
-
-# 用 https://faucet.circle.com 給 CLIENT 位址領 Arc Testnet USDC
-# 然後把 USDC 充值到 Circle Gateway Wallet（僅需執行一次）
-npm run deposit -- 1     # 向 Gateway 充入 1 USDC
 
 # 啟動付費 API，監聽 4021 連接埠
 npm run server
