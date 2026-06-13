@@ -879,6 +879,11 @@ PrefabInstance:
       propertyPath: conservativeHomePoint
       value: 
       objectReference: {fileID: 448259180}
+    - target: {fileID: 7604934809089489008, guid: 6be6f6a63de895242b8afe9663738913,
+        type: 3}
+      propertyPath: nftContractAddress
+      value: 0xc5C3960379B00bcd5C48f23B57659e5411Dcb181
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

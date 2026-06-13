@@ -61,6 +61,12 @@ namespace ArcTrading.Nanopayment
         [SerializeField] private long fallbackChainId = 5042002;
         [SerializeField] private int httpTimeoutSeconds = 20;
         [SerializeField] private bool verboseLogging = false;
+
+        [Header("Order Polling")]
+        // After the server settles the x402 payment it returns an order id and continues the mint
+        // asynchronously. We poll /order/:orderId until the order reaches a terminal state.
+        [SerializeField] private float orderPollIntervalSeconds = 2f;
+        [SerializeField] private int orderPollMaxAttempts = 90;
         
         // [ContextMenu("Fetch Paywalled Resource Test")]
         // public async void FetchPaywalledResourceTest()
@@ -172,9 +178,139 @@ namespace ArcTrading.Nanopayment
                         Debug.LogWarning("[ArcNanopayment] 200 OK without PAYMENT-RESPONSE header.");
                     }
 
-                    return retry.downloadHandler != null ? retry.downloadHandler.text : string.Empty;
+                    // Step 6 — Settlement succeeded; the server may still be minting. Poll /order
+                    // until the order reaches a terminal state (COMPLETED / REFUNDED / *_FAILED).
+                    var initialOrderJson = retry.downloadHandler != null ? retry.downloadHandler.text : string.Empty;
+                    return await ResolveOrderAsync(url, initialOrderJson);
                 }
             }
+        }
+
+        // Poll /order/:orderId until the order reaches a terminal state. On success the order
+        // view JSON (same shape returned inline by /item/:id) is handed back so downstream callers
+        // can keep using `x402_tx`, `amount`, etc.
+        private async Task<string> ResolveOrderAsync(string itemUrl, string initialOrderJson)
+        {
+            JObject order;
+            try
+            {
+                order = JObject.Parse(initialOrderJson);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"[ArcNanopayment] /item response was not a valid order view: {ex.Message}; body={initialOrderJson}");
+            }
+
+            var orderId = order.Value<string>("order_id");
+            if (string.IsNullOrEmpty(orderId))
+                throw new InvalidOperationException(
+                    $"[ArcNanopayment] /item response missing order_id; body={initialOrderJson}");
+
+            var state = order.Value<string>("state");
+            if (verboseLogging)
+                Debug.Log($"[ArcNanopayment] inline order state for {orderId}: {state}");
+            if (IsTerminalOrderState(state))
+                return FinalizeOrder(order);
+
+            var orderUrl = DeriveOrderUrl(itemUrl, orderId);
+            for (var attempt = 1; attempt <= orderPollMaxAttempts; attempt++)
+            {
+                await DelaySecondsAsync(orderPollIntervalSeconds);
+
+                using (var poll = UnityWebRequest.Get(orderUrl))
+                {
+                    poll.timeout = httpTimeoutSeconds;
+                    await SendAndAwait(poll);
+
+                    if (poll.responseCode != 200)
+                    {
+                        var body = poll.downloadHandler != null ? poll.downloadHandler.text : string.Empty;
+                        throw new InvalidOperationException(
+                            $"[ArcNanopayment] /order poll failed ({poll.responseCode}) for {orderId}: {poll.error} body={body}");
+                    }
+
+                    var json = poll.downloadHandler != null ? poll.downloadHandler.text : string.Empty;
+                    JObject polled;
+                    try
+                    {
+                        polled = JObject.Parse(json);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            $"[ArcNanopayment] /order returned non-JSON for {orderId}: {ex.Message}; body={json}");
+                    }
+
+                    var polledState = polled.Value<string>("state");
+                    if (verboseLogging)
+                        Debug.Log($"[ArcNanopayment] poll #{attempt} order={orderId} state={polledState}");
+                    if (IsTerminalOrderState(polledState))
+                        return FinalizeOrder(polled);
+                }
+            }
+
+            throw new TimeoutException(
+                $"[ArcNanopayment] order {orderId} did not reach a terminal state after {orderPollMaxAttempts} polls; " +
+                $"last state was {order.Value<string>("state")}.");
+        }
+
+        private static bool IsTerminalOrderState(string state)
+        {
+            switch (state)
+            {
+                case "COMPLETED":
+                case "REFUNDED":
+                case "REFUND_FAILED":
+                case "FAILED":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        // Translate a terminal order into either the success body or a descriptive exception.
+        // REFUNDED / REFUND_FAILED / FAILED all mean "no NFT was delivered"; we throw rather than
+        // silently returning so the caller can mark the activity as failed.
+        private static string FinalizeOrder(JObject order)
+        {
+            var state = order.Value<string>("state");
+            if (state == "COMPLETED")
+                return order.ToString(Formatting.None);
+
+            var orderId = order.Value<string>("order_id");
+            var x402Tx = order.Value<string>("x402_tx");
+            var error = order.Value<string>("error");
+
+            switch (state)
+            {
+                case "REFUNDED":
+                    throw new InvalidOperationException(
+                        $"[ArcNanopayment] mint failed and was refunded (order {orderId}, x402_tx {x402Tx}): {error}");
+                case "REFUND_FAILED":
+                    throw new InvalidOperationException(
+                        $"[ArcNanopayment] mint failed AND refund failed (order {orderId}, x402_tx {x402Tx}) — operator intervention required: {error}");
+                case "FAILED":
+                    throw new InvalidOperationException(
+                        $"[ArcNanopayment] order {orderId} failed before settlement: {error}");
+                default:
+                    throw new InvalidOperationException(
+                        $"[ArcNanopayment] order {orderId} ended in unexpected terminal state {state}: {error}");
+            }
+        }
+
+        // The x402 base URL points at /item/. Derive the sibling /order/<id> from the same host.
+        private static string DeriveOrderUrl(string itemUrl, string orderId)
+        {
+            var uri = new Uri(itemUrl);
+            return $"{uri.Scheme}://{uri.Authority}/order/{Uri.EscapeDataString(orderId)}";
+        }
+
+        private static Task DelaySecondsAsync(float seconds)
+        {
+            if (seconds <= 0f) return Task.CompletedTask;
+            var ms = Math.Max(1, (int)Math.Round(seconds * 1000f));
+            return Task.Delay(ms);
         }
 
         private string GenerateEip3009Signature(string privateKey, JObject paymentRequirements, BigInteger maxPaymentAmount)

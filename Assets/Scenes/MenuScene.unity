@@ -526,6 +526,21 @@ PrefabInstance:
       propertyPath: m_Name
       value: Canvas
       objectReference: {fileID: 0}
+    - target: {fileID: 4278161742970473477, guid: 7c29ca554a4023e4da06f636ad847484,
+        type: 3}
+      propertyPath: marketplaceContractAddress
+      value: 0xfb5b6980aC86Fa14Ae3c11680c36E4DBcD5Ea927
+      objectReference: {fileID: 0}
+    - target: {fileID: 5824528031505793484, guid: 7c29ca554a4023e4da06f636ad847484,
+        type: 3}
+      propertyPath: pricingContractAddress
+      value: 0xDab18704A0903828f264c8DF81575deEA2CC529b
+      objectReference: {fileID: 0}
+    - target: {fileID: 8932619000280859599, guid: 7c29ca554a4023e4da06f636ad847484,
+        type: 3}
+      propertyPath: nftContractAddress
+      value: 0xc5C3960379B00bcd5C48f23B57659e5411Dcb181
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -544,6 +559,11 @@ PrefabInstance:
       propertyPath: npcContract
       value: 
       objectReference: {fileID: 858287352}
+    - target: {fileID: 5614780917043822022, guid: a7031146feabef2499e3702486ae04e8,
+        type: 3}
+      propertyPath: gamePaymentAddress
+      value: 0xf25924678C8bcFCa07bFF5E86E844A5c979B44e6
+      objectReference: {fileID: 0}
     - target: {fileID: 6753959578282451615, guid: a7031146feabef2499e3702486ae04e8,
         type: 3}
       propertyPath: m_Name

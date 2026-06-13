@@ -511,7 +511,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
-  contractAddress: 0x57596BB6ae8F42Efd0C7e6038b170Da272FD9bE8
+  contractAddress: 0xf25924678C8bcFCa07bFF5E86E844A5c979B44e6
   privateKey: 
   initialUsdcCapital: 7
   nftTokenId: 0
@@ -534,6 +534,8 @@ MonoBehaviour:
   fallbackChainId: 5042002
   httpTimeoutSeconds: 20
   verboseLogging: 0
+  orderPollIntervalSeconds: 2
+  orderPollMaxAttempts: 90
 --- !u!114 &8714362781716931100
 MonoBehaviour:
   m_ObjectHideFlags: 0
