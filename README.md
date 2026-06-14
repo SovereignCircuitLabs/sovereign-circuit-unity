@@ -80,14 +80,44 @@ Sanity check (in a second terminal):
 curl -i http://localhost:4021/item/1     # should return HTTP/1.1 402 Payment Required
 ```
 
-#### 3.3 Step 2 — Open the Unity project
+#### 3.3 Step 2 — Deploy the smart contracts (required)
+
+> The Unity client **cannot** run without the on-chain contracts. You **must** deploy the contracts first and then paste their addresses into the Unity scenes / prefabs below.
+
+```bash
+# Repo: https://github.com/SovereignCircuitLabs/sovereign-circuit-contracts
+git clone https://github.com/SovereignCircuitLabs/sovereign-circuit-contracts
+cd sovereign-circuit-contracts
+
+# Follow that repo's README to install Foundry and deploy to Arc Testnet.
+```
+
+After deployment you should record the addresses of the following four contracts:
+
+- `GamePayment`
+- `NpcNFTPricing`
+- `NpcMarketplace`
+- `NpcCharacter` (the NPC ERC-721)
+
+#### 3.4 Step 3 — Open the Unity project and wire up the contract addresses
 
 1. Open this folder in **Unity Hub** → Unity **2022.3.21f1**.
-2. Open the scene `Assets/Scenes/MenuScene.unity`.
-3. Verify `ArcNanopaymentClient.x402ServerBaseUrl == http://localhost:4021/item/` on the relevant prefab.
-4. Press **Play**.
+2. Open the scene `Assets/Scenes/MenuScene.unity` and fill in the deployed addresses on these components:
+   - `WalletLoginService` → `gamePaymentAddress` ← **GamePayment** address
+   - `Canvas/MarketPlace/NpcNFTPricingClient` → `pricingContractAddress` ← **NpcNFTPricing** address
+   - `Canvas/MarketPlace/NpcNFTPricingClient` → `marketplaceContractAddress` ← **NpcMarketplace** address
+   - `Canvas/MarketPlace/NpcCharacterContractClient` → `nftContractAddress` ← **NpcCharacter** address
+     - `nftOwnerPrivateKey` may be left blank if `loginViaAuth` is enabled.
+3. Open the scene `Assets/Scenes/MainScene.unity` and fill in:
+   - `NpcChainService/NpcCharacterContractClient` → `nftContractAddress` ← **NpcCharacter** address
+4. Open each of the three NPC prefabs under `Assets/Resources/` and fill in their `ArcTradingContractClient.contractAddress` with the **GamePayment** address:
+   - `AggressiveTraderNpc`
+   - `BalancedTraderNpc`
+   - `ConservativeTraderNpc`
+5. Verify `ArcNanopaymentClient.x402ServerBaseUrl == http://localhost:4021/item/` on the relevant prefab.
+6. Press **Play**.
 
-#### 3.4 Step 3 — Wallet login (browser pop-up) in MenuScene
+#### 3.5 Step 4 — Wallet login (browser pop-up) in MenuScene
 
 - On Play the MenuScene auto-spawns `WalletLoginBootstrap`, opens the default browser to `http://127.0.0.1:7777/login`.
 - Click **Connect Wallet** → MetaMask asks for accounts.
@@ -95,7 +125,7 @@ curl -i http://localhost:4021/item/1     # should return HTTP/1.1 402 Payment Re
 - The browser tab displays `Bridge active — keep this tab open while playing.` **Do not close it** — Unity will route every owner-side write transaction (`bindPaymentWallet`, `USDC.transfer`, …) through this tab.
 - From the MenuScene you can open the **NPC Market** and the **project website** to buy an NPC (or skip this if your wallet already holds at least one NPC NFT). Only after the wallet holds ≥ 1 NPC NFT can you enter the **MainScene** to start playing.
 
-#### 3.5 Step 4 — NPC spawn & economy loop
+#### 3.6 Step 5 — NPC spawn & economy loop
 
 - After entering MainScene, Unity reads the NPC NFTs owned by the connected wallet, spawns the matching prefabs (Aggressive / Balanced / Conservative).
 - Each NPC initializes its **payment wallet** (`NpcPaymentWalletService.EnsureBoundOrRebindAsync`) — first run will trigger one MetaMask confirmation per NPC to `bindPaymentWallet(tokenId, addr)`.
@@ -175,14 +205,44 @@ npm run server
 curl -i http://localhost:4021/item/1     # 应返回 HTTP/1.1 402 Payment Required
 ```
 
-#### 3.3 Step 2 — 打开 Unity 工程
+#### 3.3 Step 2 — 部署智能合约（必须）
+
+> Unity 端 **必须** 先把链上合约部署好，并把部署得到的合约地址填回 Unity 场景 / Prefab 中，否则游戏无法正常运行。
+
+```bash
+# 仓库：https://github.com/SovereignCircuitLabs/sovereign-circuit-contracts
+git clone https://github.com/SovereignCircuitLabs/sovereign-circuit-contracts
+cd sovereign-circuit-contracts
+
+# 按照该仓库 README 安装 Foundry，并把合约部署到 Arc Testnet。
+```
+
+部署完成后请记录下以下四个合约的地址：
+
+- `GamePayment`
+- `NpcNFTPricing`
+- `NpcMarketplace`
+- `NpcCharacter`（NPC ERC-721）
+
+#### 3.4 Step 3 — 打开 Unity 工程并填入合约地址
 
 1. 在 **Unity Hub** 中用 Unity **2022.3.21f1** 打开当前目录。
-2. 打开场景 `Assets/Scenes/MenuScene.unity`。
-3. 在相关 prefab 上确认 `ArcNanopaymentClient.x402ServerBaseUrl == http://localhost:4021/item/`。
-4. 点 **Play**。
+2. 打开场景 `Assets/Scenes/MenuScene.unity`，并在以下组件上填入部署好的合约地址：
+   - `WalletLoginService` → `gamePaymentAddress` ← 填 **GamePayment** 地址
+   - `Canvas/MarketPlace/NpcNFTPricingClient` → `pricingContractAddress` ← 填 **NpcNFTPricing** 地址
+   - `Canvas/MarketPlace/NpcNFTPricingClient` → `marketplaceContractAddress` ← 填 **NpcMarketplace** 地址
+   - `Canvas/MarketPlace/NpcCharacterContractClient` → `nftContractAddress` ← 填 **NpcCharacter** 地址
+     - 如果勾选了 `loginViaAuth`，则 `nftOwnerPrivateKey` 可以留空。
+3. 打开场景 `Assets/Scenes/MainScene.unity`，并填入：
+   - `NpcChainService/NpcCharacterContractClient` → `nftContractAddress` ← 填 **NpcCharacter** 地址
+4. 打开 `Assets/Resources/` 目录下的三个 NPC 预制体，把它们各自的 `ArcTradingContractClient.contractAddress` 都填成 **GamePayment** 地址：
+   - `AggressiveTraderNpc`
+   - `BalancedTraderNpc`
+   - `ConservativeTraderNpc`
+5. 在相关 prefab 上确认 `ArcNanopaymentClient.x402ServerBaseUrl == http://localhost:4021/item/`。
+6. 点 **Play**。
 
-#### 3.4 Step 3 — MenuScene 钱包登录（浏览器弹窗）
+#### 3.5 Step 4 — MenuScene 钱包登录（浏览器弹窗）
 
 - 进入 Play 后，MenuScene 会自动 spawn `WalletLoginBootstrap`，并在默认浏览器中打开 `http://127.0.0.1:7777/login`。
 - 点 **Connect Wallet** → MetaMask 弹窗请求账户连接。
@@ -190,7 +250,7 @@ curl -i http://localhost:4021/item/1     # 应返回 HTTP/1.1 402 Payment Requir
 - 浏览器随后显示 `Bridge active — keep this tab open while playing.` —— **不要关闭该标签页**，Unity 之后所有 owner 的写交易（`bindPaymentWallet`、`USDC.transfer` …）都通过这个 tab 让 MetaMask 签名。
 - 在 MenuScene 中可以打开 **NPC Market** 与 **项目官网**，购买 NPC（如果你的钱包里已经持有 NPC NFT 则可跳过此步）。**只有当钱包持有 ≥ 1 个 NPC NFT 时，才能进入 MainScene 正式开始游戏。**
 
-#### 3.5 Step 4 — NPC 生成与经济循环
+#### 3.6 Step 5 — NPC 生成与经济循环
 
 - 进入 MainScene 后，Unity 会读取当前钱包持有的 NPC NFT，动态生成对应的 NPC 预制体（Aggressive / Balanced / Conservative）。
 - 每个 NPC 初始化时会调用 `NpcPaymentWalletService.EnsureBoundOrRebindAsync` —— 首次运行会为每个 NPC 弹一次 `bindPaymentWallet(tokenId, addr)` 的 MetaMask 确认。
@@ -270,14 +330,44 @@ npm run server
 curl -i http://localhost:4021/item/1     # 應回傳 HTTP/1.1 402 Payment Required
 ```
 
-#### 3.3 Step 2 — 開啟 Unity 專案
+#### 3.3 Step 2 — 部署智能合約（必須）
+
+> Unity 端 **必須** 先把鏈上合約部署好，並把部署後得到的合約地址填回 Unity 場景 / Prefab，否則遊戲無法正常運作。
+
+```bash
+# 倉庫：https://github.com/SovereignCircuitLabs/sovereign-circuit-contracts
+git clone https://github.com/SovereignCircuitLabs/sovereign-circuit-contracts
+cd sovereign-circuit-contracts
+
+# 依該倉庫 README 安裝 Foundry，並把合約部署到 Arc Testnet。
+```
+
+部署完成後請記錄下以下四個合約的地址：
+
+- `GamePayment`
+- `NpcNFTPricing`
+- `NpcMarketplace`
+- `NpcCharacter`（NPC ERC-721）
+
+#### 3.4 Step 3 — 開啟 Unity 專案並填入合約地址
 
 1. 在 **Unity Hub** 中用 Unity **2022.3.21f1** 開啟此目錄。
-2. 開啟場景 `Assets/Scenes/MenuScene.unity`。
-3. 在相關 prefab 上確認 `ArcNanopaymentClient.x402ServerBaseUrl == http://localhost:4021/item/`。
-4. 點 **Play**。
+2. 開啟場景 `Assets/Scenes/MenuScene.unity`，並在以下元件上填入部署好的合約地址：
+   - `WalletLoginService` → `gamePaymentAddress` ← 填 **GamePayment** 地址
+   - `Canvas/MarketPlace/NpcNFTPricingClient` → `pricingContractAddress` ← 填 **NpcNFTPricing** 地址
+   - `Canvas/MarketPlace/NpcNFTPricingClient` → `marketplaceContractAddress` ← 填 **NpcMarketplace** 地址
+   - `Canvas/MarketPlace/NpcCharacterContractClient` → `nftContractAddress` ← 填 **NpcCharacter** 地址
+     - 若已勾選 `loginViaAuth`，則 `nftOwnerPrivateKey` 可以留空。
+3. 開啟場景 `Assets/Scenes/MainScene.unity`，並填入：
+   - `NpcChainService/NpcCharacterContractClient` → `nftContractAddress` ← 填 **NpcCharacter** 地址
+4. 開啟 `Assets/Resources/` 底下的三個 NPC 預製體，將它們各自的 `ArcTradingContractClient.contractAddress` 都填成 **GamePayment** 地址：
+   - `AggressiveTraderNpc`
+   - `BalancedTraderNpc`
+   - `ConservativeTraderNpc`
+5. 在相關 prefab 上確認 `ArcNanopaymentClient.x402ServerBaseUrl == http://localhost:4021/item/`。
+6. 點 **Play**。
 
-#### 3.4 Step 3 — MenuScene 錢包登入（瀏覽器彈窗）
+#### 3.5 Step 4 — MenuScene 錢包登入（瀏覽器彈窗）
 
 - 進入 Play 後，MenuScene 會自動 spawn `WalletLoginBootstrap`，並在預設瀏覽器開啟 `http://127.0.0.1:7777/login`。
 - 點 **Connect Wallet** → MetaMask 彈窗請求帳戶連線。
@@ -285,7 +375,7 @@ curl -i http://localhost:4021/item/1     # 應回傳 HTTP/1.1 402 Payment Requir
 - 瀏覽器隨後顯示 `Bridge active — keep this tab open while playing.` —— **請勿關閉該分頁**，Unity 之後所有 owner 的寫入交易（`bindPaymentWallet`、`USDC.transfer`…）都會透過這個分頁讓 MetaMask 簽名。
 - 在 MenuScene 中可以開啟 **NPC Market** 與 **專案官網**，購買 NPC（若你的錢包已持有 NPC NFT 則可略過此步）。**只有當錢包持有 ≥ 1 個 NPC NFT 時，才能進入 MainScene 正式開始遊戲。**
 
-#### 3.5 Step 4 — NPC 生成與經濟循環
+#### 3.6 Step 5 — NPC 生成與經濟循環
 
 - 進入 MainScene 後，Unity 會讀取目前錢包持有的 NPC NFT，動態生成對應的 NPC 預製體（Aggressive / Balanced / Conservative）。
 - 每個 NPC 初始化時會呼叫 `NpcPaymentWalletService.EnsureBoundOrRebindAsync` —— 首次執行會為每個 NPC 跳一次 `bindPaymentWallet(tokenId, addr)` 的 MetaMask 確認。
