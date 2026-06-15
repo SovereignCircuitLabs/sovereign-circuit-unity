@@ -32,6 +32,20 @@ public class NpcListingInfo
     public NpcDataDTO NpcData;
 }
 
+public class OwnedNpcSellableInfo
+{
+    public BigInteger TokenId;
+    public NpcDataDTO NpcData;
+
+    public BigInteger QuotedPrice;
+    public BigInteger TbaTotalValue;
+    public BigInteger ScarcityMultiplierBps;
+    public BigInteger ClassId;
+
+    public bool IsListed;
+    public BigInteger ListedMinPrice;
+}
+
 /// <summary>
 /// Wrapper around the NpcMarketplace contract.
 ///
@@ -170,6 +184,77 @@ public class NpcMarketplaceClient : MonoBehaviour
             catch (Exception ex)
             {
                 Debug.LogWarning($"[NpcMarketplaceClient] getNpc({id}) failed: {ex.Message}");
+            }
+
+            result.Add(info);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Enumerate every NPC owned by <paramref name="owner"/>, with on-chain
+    /// pricing context and current marketplace listing state. Used by the
+    /// "List my NPCs for sale" menu.
+    ///
+    /// Per NPC we issue: 1× ownerOf (inside EnumerateOwnedNpcsAsync), 1× getNpc
+    /// (same), 1× quoteNpcPrice, 1× getNpcClassId, 1× getListing. The price
+    /// quote is what we suggest as a default minPrice in the UI.
+    /// </summary>
+    public async Task<List<OwnedNpcSellableInfo>> EnumerateOwnedForSaleAsync(
+        string owner, CancellationToken ct = default)
+    {
+        var result = new List<OwnedNpcSellableInfo>();
+        if (string.IsNullOrWhiteSpace(owner)) return result;
+        if (npcCharacter == null)
+        {
+            Debug.LogError("[NpcMarketplaceClient] npcCharacter ref is missing — cannot enumerate owned.");
+            return result;
+        }
+
+        var owned = await npcCharacter.EnumerateOwnedNpcsAsync(owner, ct);
+        if (owned.Count == 0) return result;
+
+        foreach (var entry in owned)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var info = new OwnedNpcSellableInfo
+            {
+                TokenId = entry.TokenId,
+                NpcData = entry.Data,
+            };
+
+            if (pricing != null)
+            {
+                try
+                {
+                    var quote = await pricing.QuoteNpcPriceAsync(entry.TokenId);
+                    info.QuotedPrice = quote.Price;
+                    info.TbaTotalValue = quote.TbaTotalValue;
+                    info.ScarcityMultiplierBps = quote.ScarcityMultiplierBps;
+                    info.ClassId = await pricing.GetNpcClassIdAsync(entry.TokenId);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning(
+                        $"[NpcMarketplaceClient] quoteNpcPrice({entry.TokenId}) failed: {ex.Message}");
+                }
+            }
+
+            try
+            {
+                var listing = await GetListingAsync(entry.TokenId);
+                if (listing != null && listing.Active)
+                {
+                    info.IsListed = true;
+                    info.ListedMinPrice = listing.MinPrice;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning(
+                    $"[NpcMarketplaceClient] getListing({entry.TokenId}) failed: {ex.Message}");
             }
 
             result.Add(info);

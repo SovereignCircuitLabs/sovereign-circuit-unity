@@ -20,14 +20,13 @@ using UnityEngine.UI;
 /// </summary>
 public class NpcMarketplaceMenu : MonoBehaviour
 {
-    [Header("Contracts")]
-    [SerializeField] private NpcMarketplaceClient marketplaceClient;
+    [Header("Contracts")] [SerializeField] private NpcMarketplaceClient marketplaceClient;
     [SerializeField] private NpcNFTPricingClient pricingClient;
     [SerializeField] private NpcCharacterContractClient npcCharacter;
 
-    [Header("Panel")]
-    [Tooltip("Root GameObject of the buy-NPC panel. Toggled by Open/Close.")]
-    [SerializeField] private GameObject panelRoot;
+    [Header("Panel")] [Tooltip("Root GameObject of the buy-NPC panel. Toggled by Open/Close.")] [SerializeField]
+    private GameObject panelRoot;
+
     [SerializeField] private Button openPanelButton;
     [SerializeField] private Button closePanelButton;
     [SerializeField] private Button refreshButton;
@@ -35,11 +34,14 @@ public class NpcMarketplaceMenu : MonoBehaviour
     [Header("Listings list")]
     [Tooltip("Parent transform of the row prefab instances. " +
              "Should have a VerticalLayoutGroup + ContentSizeFitter on the scroll-view content.")]
-    [SerializeField] private RectTransform rowContainer;
+    [SerializeField]
+    private RectTransform rowContainer;
+
     [SerializeField] private NpcMarketplaceRow rowPrefab;
 
-    [Header("Status / feedback")]
-    [SerializeField] private Text statusText;
+    [Header("Status / feedback")] [SerializeField]
+    private Text statusText;
+
     [SerializeField] private Text walletLabel;
     [SerializeField] private GameObject loadingIndicator;
     //[SerializeField] private GameObject emptyStateRoot;
@@ -47,9 +49,12 @@ public class NpcMarketplaceMenu : MonoBehaviour
     [Header("Buy guardrails")]
     [Tooltip("Extra room above the quoted price the player tolerates between " +
              "quote-time and execution-time. 500 bps = 5%.")]
-    [SerializeField, Range(0, 5000)] private int buySlippageBps = 500;
+    [SerializeField, Range(0, 5000)]
+    private int buySlippageBps = 500;
+
     [Tooltip("Auto-refresh listings every N seconds while the panel is open. 0 disables auto-refresh.")]
-    [SerializeField, Min(0f)] private float autoRefreshInterval = 0f;
+    [SerializeField, Min(0f)]
+    private float autoRefreshInterval = 0f;
 
     private readonly List<NpcMarketplaceRow> spawnedRows = new List<NpcMarketplaceRow>();
     private CancellationTokenSource lifetimeCts;
@@ -98,7 +103,15 @@ public class NpcMarketplaceMenu : MonoBehaviour
 
     private void OnDestroy()
     {
-        try { lifetimeCts?.Cancel(); } catch { /* ignored */ }
+        try
+        {
+            lifetimeCts?.Cancel();
+        }
+        catch
+        {
+            /* ignored */
+        }
+
         lifetimeCts?.Dispose();
         lifetimeCts = null;
     }
@@ -189,6 +202,7 @@ public class NpcMarketplaceMenu : MonoBehaviour
         {
             if (spawnedRows[i] != null) Destroy(spawnedRows[i].gameObject);
         }
+
         spawnedRows.Clear();
 
         for (int i = 0; i < listings.Count; i++)
@@ -196,6 +210,9 @@ public class NpcMarketplaceMenu : MonoBehaviour
             var row = Instantiate(rowPrefab, rowContainer);
             row.gameObject.SetActive(true);
             row.Bind(listings[i], OnBuyClicked);
+            if (String.Equals(WalletLoginService.Instance.Current?.wallet, listings[i].Seller,
+                    StringComparison.OrdinalIgnoreCase))
+                row.SetInteractable(false);
             spawnedRows.Add(row);
         }
     }
@@ -207,6 +224,7 @@ public class NpcMarketplaceMenu : MonoBehaviour
             SetStatus("A purchase is already in progress.", isError: true);
             return;
         }
+
         if (listing == null) return;
 
         buying = true;
@@ -265,6 +283,7 @@ public class NpcMarketplaceMenu : MonoBehaviour
         {
             if (spawnedRows[i] != null) spawnedRows[i].SetInteractable(interactable);
         }
+
         if (refreshButton != null) refreshButton.interactable = interactable;
     }
 
