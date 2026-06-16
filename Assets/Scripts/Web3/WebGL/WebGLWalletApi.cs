@@ -132,6 +132,7 @@ namespace ArcTrading.WebGL
             throw SignedRawTxRequired("mintRandom");
         }
 
+        // TODO: x402 payment not right! Need client-server handshake implementation.
         public static Task<string> MintRandomX402Async(string to, CancellationToken ct = default)
         {
             RequireToken();
