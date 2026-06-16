@@ -245,7 +245,7 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<decimal> GetVaultBalanceUSDCAsync(string account)
     {
         if (string.IsNullOrWhiteSpace(account)) return 0m;
-
+// TODO: vault USDC not correctly display, need to be fixed.
 #if UNITY_WEBGL && !UNITY_EDITOR
         var items = await ArcTrading.WebGL.WebGLChainApi.GetTbaItemBalancesAsync(account);
         var sellPricesArr = await ArcTrading.WebGL.WebGLChainApi.GetAllSellPricesRawAsync();
