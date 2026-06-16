@@ -37,7 +37,9 @@ public static class Erc20UsdcHelper
 #if UNITY_WEBGL && !UNITY_EDITOR
         // WebGL: server's admin signer approves on behalf of its own wallet.
         // The `owner` parameter is silently dropped — the server is the owner.
-        return await ArcTrading.WebGL.WebGLWalletApi.UsdcApproveAsync(spender, amount);
+        throw new NotSupportedException(
+            "WebGL USDC approve requires a local private key and POST /tx/send-raw. " +
+            "Use the signed raw-tx path in the caller instead of Erc20UsdcHelper.ApproveAsync.");
 #else
         var usdc = web3.Eth.GetContract(Erc20Abi, ArcUsdcAddress);
         var approveFn = usdc.GetFunction("approve");
@@ -53,7 +55,9 @@ public static class Erc20UsdcHelper
     public static async Task<string> TransferAsync(Web3 web3, string to, BigInteger amount)
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
-        return await ArcTrading.WebGL.WebGLWalletApi.UsdcTransferAsync(to, amount);
+        throw new NotSupportedException(
+            "WebGL USDC transfer requires a local private key and POST /tx/send-raw. " +
+            "Use the signed raw-tx path in the caller instead of Erc20UsdcHelper.TransferAsync.");
 #else
         var usdc = web3.Eth.GetContract(Erc20Abi, ArcUsdcAddress);
         var transferFn = usdc.GetFunction("transfer");
@@ -77,7 +81,9 @@ public static class Erc20UsdcHelper
         // We don't know the server's address up-front, so the most pragmatic check
         // is to ask /usdc/approve to top up if needed — the route itself short-
         // circuits on already-sufficient allowance in the service layer.
-        await ArcTrading.WebGL.WebGLWalletApi.UsdcApproveAsync(spender, amount);
+        throw new NotSupportedException(
+            "WebGL USDC approval checks require a local private key and POST /tx/send-raw. " +
+            "Use the signed raw-tx path in the caller instead of Erc20UsdcHelper.EnsureApprovalAsync.");
 #else
         var owner = web3.TransactionManager.Account.Address;
 

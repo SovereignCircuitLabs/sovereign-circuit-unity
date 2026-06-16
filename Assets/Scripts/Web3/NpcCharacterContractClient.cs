@@ -169,14 +169,24 @@ public class NpcCharacterContractClient : MonoBehaviour
     private void Awake()
     {
         readOnlyWeb3 = new Web3(rpcUrl);
+#if UNITY_WEBGL && !UNITY_EDITOR
+        ArcTrading.Crypto.EthRawTxSender.ConfigureRpc(rpcUrl);
+#endif
     }
 
     public async Task<long> GetChainIdAsync()
     {
         if (CachedChainId.HasValue) return CachedChainId.Value;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var id = await ArcTrading.Crypto.WebGLPublicRpc.GetChainIdAsync();
+        CachedChainId = id;
+        ArcTrading.Crypto.EthRawTxSender.ConfigureChainId(id);
+        return id;
+#else
         var id = (long)(await readOnlyWeb3.Eth.ChainId.SendRequestAsync()).Value;
         CachedChainId = id;
         return id;
+#endif
     }
 
     public async Task<(string wallet, ulong version)> GetPaymentBindingAsync(BigInteger tokenId)
@@ -296,12 +306,16 @@ public class NpcCharacterContractClient : MonoBehaviour
     public async Task<string> BindPaymentWalletAsync(BigInteger tokenId, string walletAddress)
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
-        return await ArcTrading.WebGL.WebGLWalletApi.BindPaymentWalletAsync(tokenId, walletAddress);
+        var data = HexToBytes(ArcTrading.Crypto.WebGLAbiBridge.EncodeFunctionData(
+            Abi,
+            "bindPaymentWallet",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(tokenId, walletAddress)));
 #else
         var data = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress)
             .GetFunction("bindPaymentWallet")
             .GetData(tokenId, walletAddress)
             .HexToByteArray();
+#endif
         return await SendOwnerTxAsync(
             to: nftContractAddress,
             value: BigInteger.Zero,
@@ -309,18 +323,21 @@ public class NpcCharacterContractClient : MonoBehaviour
             gas: new HexBigInteger(120000),
             waitReceipt: true,
             label: $"bindPaymentWallet(tokenId={tokenId})");
-#endif
     }
 
     public async Task<string> ClearPaymentWalletAsync(BigInteger tokenId)
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
-        return await ArcTrading.WebGL.WebGLWalletApi.ClearPaymentWalletAsync(tokenId);
+        var data = HexToBytes(ArcTrading.Crypto.WebGLAbiBridge.EncodeFunctionData(
+            Abi,
+            "clearPaymentWallet",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(tokenId)));
 #else
         var data = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress)
             .GetFunction("clearPaymentWallet")
             .GetData(tokenId)
             .HexToByteArray();
+#endif
         return await SendOwnerTxAsync(
             to: nftContractAddress,
             value: BigInteger.Zero,
@@ -328,7 +345,6 @@ public class NpcCharacterContractClient : MonoBehaviour
             gas: new HexBigInteger(80000),
             waitReceipt: true,
             label: $"clearPaymentWallet(tokenId={tokenId})");
-#endif
     }
 
     public async Task<string> TransferUsdcFromOwnerAsync(string toAddress, BigInteger amount)
@@ -342,12 +358,16 @@ public class NpcCharacterContractClient : MonoBehaviour
         // Server's admin wallet pays; the "owner" identity is whoever the server
         // is configured to act as. Semantically different from Desktop where the
         // NFT owner's PK pays — call sites should still see funds land at toAddress.
-        return await ArcTrading.WebGL.WebGLWalletApi.UsdcTransferAsync(toAddress, amount);
+        var data = HexToBytes(ArcTrading.Crypto.WebGLAbiBridge.EncodeFunctionData(
+            Erc20TransferAbi,
+            "transfer",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(toAddress, amount)));
 #else
         var data = readOnlyWeb3.Eth.GetContract(Erc20TransferAbi, Erc20UsdcHelper.ArcUsdcAddress)
             .GetFunction("transfer")
             .GetData(toAddress, amount)
             .HexToByteArray();
+#endif
         return await SendOwnerTxAsync(
             to: Erc20UsdcHelper.ArcUsdcAddress,
             value: BigInteger.Zero,
@@ -355,7 +375,6 @@ public class NpcCharacterContractClient : MonoBehaviour
             gas: new HexBigInteger(120000),
             waitReceipt: true,
             label: $"USDC transfer → {Shorten(toAddress)} ({amount})");
-#endif
     }
 
     /// <summary>
@@ -378,14 +397,20 @@ public class NpcCharacterContractClient : MonoBehaviour
         // The server's /tba/execute route packs (target,value,data,operation) into
         // the TBA's execute() itself, so we forward the inner call rather than the
         // pre-encoded execute calldata.
-        var dataHex = data == null || data.Length == 0 ? "0x" : "0x" + ToHexString(data);
-        return await ArcTrading.WebGL.WebGLWalletApi.TbaExecuteAsync(
-            tbaAddress, target, value, dataHex, operation: 0);
+        var executeCalldata = HexToBytes(ArcTrading.Crypto.WebGLAbiBridge.EncodeFunctionData(
+            Erc6551AccountAbi,
+            "execute",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(
+                target,
+                value,
+                ArcTrading.Crypto.EthRawTxSender.BytesToHex(data),
+                0)));
 #else
         var executeCalldata = readOnlyWeb3.Eth.GetContract(Erc6551AccountAbi, tbaAddress)
             .GetFunction("execute")
             .GetData(target, value, data ?? Array.Empty<byte>(), (byte)0)
             .HexToByteArray();
+#endif
         return await SendOwnerTxAsync(
             to: tbaAddress,
             value: BigInteger.Zero,
@@ -393,16 +418,18 @@ public class NpcCharacterContractClient : MonoBehaviour
             gas: gas,
             waitReceipt: waitForReceipt,
             label: $"TBA.execute → {Shorten(target)}");
-#endif
     }
 
 #if UNITY_WEBGL && !UNITY_EDITOR
-    private static string ToHexString(byte[] bytes)
+    private static byte[] HexToBytes(string hex)
     {
-        if (bytes == null || bytes.Length == 0) return string.Empty;
-        var sb = new System.Text.StringBuilder(bytes.Length * 2);
-        for (int i = 0; i < bytes.Length; i++) sb.Append(bytes[i].ToString("x2"));
-        return sb.ToString();
+        if (string.IsNullOrEmpty(hex) || hex == "0x") return Array.Empty<byte>();
+        var clean = hex.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? hex.Substring(2) : hex;
+        if ((clean.Length & 1) == 1) clean = "0" + clean;
+        var bytes = new byte[clean.Length / 2];
+        for (int i = 0; i < bytes.Length; i++)
+            bytes[i] = Convert.ToByte(clean.Substring(i * 2, 2), 16);
+        return bytes;
     }
 #endif
 
@@ -431,7 +458,12 @@ public class NpcCharacterContractClient : MonoBehaviour
             {
                 txHash = await SendViaLocalKeyAsync(chainId, to, value, data, gas);
             }
+#if UNITY_WEBGL && !UNITY_EDITOR
+            if (waitReceipt)
+                Debug.LogWarning($"[NpcCharacterContractClient] {label} submitted (tx={txHash}); receipt polling is skipped in WebGL — caller should not assume the tx has confirmed.");
+#else
             if (waitReceipt) await WaitReceiptAsync(readOnlyWeb3, txHash);
+#endif
             return txHash;
         }
         finally
@@ -474,10 +506,29 @@ public class NpcCharacterContractClient : MonoBehaviour
         long chainId, string to, BigInteger value, byte[] data, HexBigInteger gas)
     {
         if (string.IsNullOrWhiteSpace(nftOwnerPrivateKey))
+#if UNITY_WEBGL && !UNITY_EDITOR
+            throw new InvalidOperationException(
+                $"{name}: WebGL owner-side writes must go through MetaMask. " +
+                "Set loginViaAuth=true on this component; embedding nftOwnerPrivateKey " +
+                "in a WebGL build would ship the private key inside the bundle.");
+#else
             throw new InvalidOperationException(
                 $"{name} requires nftOwnerPrivateKey for owner-side writes " +
                 "(or enable loginViaAuth to route through MetaMask).");
+#endif
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        ArcTrading.Crypto.EthRawTxSender.ConfigureChainId(chainId);
+        var pk = nftOwnerPrivateKey.Trim();
+        var from = ArcTrading.Crypto.EthCryptoBackend.Current.DeriveAddress(pk);
+        return await ArcTrading.Crypto.EthRawTxSender.SendLegacyAsync(
+            from,
+            pk,
+            to,
+            value,
+            ArcTrading.Crypto.EthRawTxSender.BytesToHex(data),
+            gas.Value).ConfigureAwait(true);
+#else
         var account = new Account(nftOwnerPrivateKey.Trim(), chainId);
         var web3 = new Web3(account, rpcUrl);
         var txInput = new TransactionInput
@@ -489,6 +540,7 @@ public class NpcCharacterContractClient : MonoBehaviour
             Gas = gas,
         };
         return await web3.Eth.TransactionManager.SendTransactionAsync(txInput).ConfigureAwait(true);
+#endif
     }
 
     private static async Task WaitReceiptAsync(Web3 web3, string txHash)

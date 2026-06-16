@@ -94,6 +94,18 @@ namespace ArcTrading.Auth
 
         public void Start(int preferredPort)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // WebGL builds can't open sockets — there is no HttpListener equivalent.
+            // The browser-side equivalent of this whole class is "talk to
+            // window.ethereum directly via jslib", which lives in
+            // Assets/Plugins/WebGL/ArcTradingCryptoBridge.jslib (Phase 5).
+            // WalletLoginService.EnsureLoggedInAsync routes to that path under
+            // the same UNITY_WEBGL fence; callers should never reach this method
+            // in a WebGL build.
+            throw new NotSupportedException(
+                "WalletLoginServer.Start is not supported on WebGL. " +
+                "Use the jslib window.ethereum bridge via WalletLoginService instead.");
+#else
             HttpListener candidate = null;
             int chosen = 0;
             for (int p = preferredPort; p < preferredPort + 10; p++)
@@ -131,6 +143,7 @@ namespace ArcTrading.Auth
 
             Debug.Log($"[WalletLoginServer] listening on {boundOrigin} (login at {LoginUrl}, persistentBridge={persistentBridge})");
             _ = Task.Run(() => ListenLoop(cts.Token));
+#endif
         }
 
         public Task<WalletSession> AwaitLoginAsync(CancellationToken externalCancel)
@@ -150,6 +163,12 @@ namespace ArcTrading.Auth
         /// </summary>
         public Task<string> EnqueueOwnerTxAsync(WalletTxRequest req, CancellationToken ct = default)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            throw new NotSupportedException(
+                "WalletLoginServer.EnqueueOwnerTxAsync is not supported on WebGL. " +
+                "In WebGL, owner-side txs are signed via the jslib bridge to " +
+                "window.ethereum (MetaMask) or via IEthCryptoBackend + POST /tx/send-raw.");
+#else
             if (!IsListening)
                 throw new InvalidOperationException("[WalletLoginServer] not listening; call Start first.");
             if (authenticatedSession == null)
@@ -171,6 +190,7 @@ namespace ArcTrading.Auth
             pendingTxs.Enqueue(req);
             txAvailable.Release();
             return resultTcs.Task;
+#endif
         }
 
         public void Stop()

@@ -8,10 +8,11 @@ using UnityEngine;
 namespace ArcTrading.WebGL
 {
     /// <summary>
-    /// Write-path entry points (Phase 2-4). Every method here POSTs to the
-    /// TypeScript server's contract routes; the server holds the executor key
-    /// and signs every transaction. The player never signs anything on-chain
-    /// in WebGL mode.
+    /// Legacy server write-path entry points. Phase 2-4 writes now sign locally
+    /// through IEthCryptoBackend and broadcast through POST /tx/send-raw; most
+    /// methods here intentionally reject calls so WebGL cannot silently fall
+    /// back to the server-admin signer. The x402 mint route is the exception:
+    /// the server owns that payment flow and receives an explicit `to` address.
     ///
     /// Authentication: call <see cref="ArcTradingWebGLConfig.SetAdminToken"/>
     /// once at boot (e.g. from a Bootstrap MonoBehaviour or after SIWE login).
@@ -34,6 +35,16 @@ namespace ArcTrading.WebGL
             public string id;
             public string price;
             public string status;
+
+            // NPC-perspective aggregate routes (/npc/:tokenId/sell-item/:itemId,
+            // /npc/:tokenId/mint-random) return this when a lazy approval was
+            // also submitted as a prerequisite tx. Empty when not needed.
+            public string approvalTxHash;
+
+            // Echoed back by the NPC-perspective routes for caller logging.
+            public string tokenId;
+            public string itemId;
+            public string tba;
         }
 
         [Serializable] private class BuyItemX402Body
@@ -94,14 +105,18 @@ namespace ArcTrading.WebGL
             return ResolveTxHash(dto) ?? raw;
         }
 
+        private static NotSupportedException SignedRawTxRequired(string operation)
+            => new NotSupportedException(
+                $"{operation} requires local signing via IEthCryptoBackend and POST /tx/send-raw. " +
+                "Do not route this WebGL write through the server-admin contract route.");
+
         // ============================================================
         //  Phase 2: buy / sell / mint items
         // ============================================================
 
         public static Task<string> SellItemAsync(BigInteger itemId, CancellationToken ct = default)
         {
-            RequireToken();
-            return PostAndResolveAsync($"/game/item/{itemId}/sell", null, $"sellItem({itemId})", ct);
+            throw SignedRawTxRequired($"sellItem({itemId})");
         }
 
         public static Task<string> BuyItemX402Async(
@@ -109,22 +124,12 @@ namespace ArcTrading.WebGL
             BigInteger paidAmount, BigInteger maxPriceAllowed,
             CancellationToken ct = default)
         {
-            RequireToken();
-            if (string.IsNullOrWhiteSpace(to)) throw new ArgumentException("to address required", nameof(to));
-            var body = JsonUtility.ToJson(new BuyItemX402Body
-            {
-                to = to,
-                paidAmount = paidAmount.ToString(),
-                maxPriceAllowed = maxPriceAllowed.ToString(),
-            });
-            return PostAndResolveAsync($"/game/item/{itemId}/buy-x402", body, $"buyItemX402({itemId})", ct);
+            throw SignedRawTxRequired($"buyItemX402({itemId})");
         }
 
         public static Task<string> MintRandomAsync(BigInteger maxPriceAllowed, CancellationToken ct = default)
         {
-            RequireToken();
-            var body = JsonUtility.ToJson(new MintRandomBody { maxPriceAllowed = maxPriceAllowed.ToString() });
-            return PostAndResolveAsync("/game/mint-random", body, "mintRandom", ct);
+            throw SignedRawTxRequired("mintRandom");
         }
 
         public static Task<string> MintRandomX402Async(string to, CancellationToken ct = default)
@@ -136,38 +141,48 @@ namespace ArcTrading.WebGL
         }
 
         // ============================================================
+        //  Phase 2.5: NPC-perspective aggregate writes
+        // ============================================================
+        // These route the call through the NPC's ERC-6551 TBA via the server's
+        // /tba/execute primitive, so msg.sender to GamePayment is the TBA (the
+        // entity that actually holds the items / pays the USDC). The server's
+        // serverAccount must be bound as paymentWallet for the NPC NFT — call
+        // BindPaymentWalletAsync(tokenId, serverAccountAddress) at boot once
+        // per NPC, or the server returns 409 with "npc payment wallet not
+        // bound to server account".
+
+        public static Task<string> NpcSellItemAsync(BigInteger tokenId, BigInteger itemId, CancellationToken ct = default)
+        {
+            throw SignedRawTxRequired($"npcSellItem(tokenId={tokenId}, itemId={itemId})");
+        }
+
+        public static Task<string> NpcMintRandomAsync(BigInteger tokenId, BigInteger maxPriceAllowed, CancellationToken ct = default)
+        {
+            throw SignedRawTxRequired($"npcMintRandom(tokenId={tokenId})");
+        }
+
+        // ============================================================
         //  Phase 3: USDC + payment-binding (x402 setup paths)
         // ============================================================
 
         public static Task<string> UsdcApproveAsync(string spender, BigInteger amount, CancellationToken ct = default)
         {
-            RequireToken();
-            if (string.IsNullOrWhiteSpace(spender)) throw new ArgumentException("spender required", nameof(spender));
-            var body = JsonUtility.ToJson(new UsdcApproveBody { spender = spender, amount = amount.ToString() });
-            return PostAndResolveAsync("/usdc/approve", body, $"usdcApprove({spender})", ct);
+            throw SignedRawTxRequired($"USDC.approve({spender})");
         }
 
         public static Task<string> UsdcTransferAsync(string to, BigInteger amount, CancellationToken ct = default)
         {
-            RequireToken();
-            if (string.IsNullOrWhiteSpace(to)) throw new ArgumentException("to required", nameof(to));
-            var body = JsonUtility.ToJson(new UsdcTransferBody { to = to, amount = amount.ToString() });
-            return PostAndResolveAsync("/usdc/transfer", body, $"usdcTransfer({to})", ct);
+            throw SignedRawTxRequired($"USDC.transfer({to})");
         }
 
         public static Task<string> BindPaymentWalletAsync(BigInteger tokenId, string wallet, CancellationToken ct = default)
         {
-            RequireToken();
-            if (string.IsNullOrWhiteSpace(wallet)) throw new ArgumentException("wallet required", nameof(wallet));
-            var body = JsonUtility.ToJson(new BindPaymentWalletBody { tokenId = tokenId.ToString(), wallet = wallet });
-            return PostAndResolveAsync("/npc-character/payment-binding", body, $"bindPaymentWallet({tokenId})", ct);
+            throw SignedRawTxRequired($"bindPaymentWallet({tokenId})");
         }
 
         public static Task<string> ClearPaymentWalletAsync(BigInteger tokenId, CancellationToken ct = default)
         {
-            RequireToken();
-            var body = JsonUtility.ToJson(new ClearPaymentWalletBody { tokenId = tokenId.ToString() });
-            return PostAndResolveAsync("/npc-character/payment-binding/clear", body, $"clearPaymentWallet({tokenId})", ct);
+            throw SignedRawTxRequired($"clearPaymentWallet({tokenId})");
         }
 
         // ============================================================
@@ -176,38 +191,22 @@ namespace ArcTrading.WebGL
 
         public static Task<string> GatewayDepositAsync(string token, BigInteger value, CancellationToken ct = default)
         {
-            RequireToken();
-            if (string.IsNullOrWhiteSpace(token)) throw new ArgumentException("token required", nameof(token));
-            var body = JsonUtility.ToJson(new GatewayDepositBody { token = token, value = value.ToString() });
-            return PostAndResolveAsync("/gateway/deposit", body, $"gatewayDeposit({token})", ct);
+            throw SignedRawTxRequired($"gatewayDeposit({token})");
         }
 
         public static Task<string> GatewayDepositForAsync(string token, string depositor, BigInteger value, CancellationToken ct = default)
         {
-            RequireToken();
-            if (string.IsNullOrWhiteSpace(token)) throw new ArgumentException("token required", nameof(token));
-            if (string.IsNullOrWhiteSpace(depositor)) throw new ArgumentException("depositor required", nameof(depositor));
-            var body = JsonUtility.ToJson(new GatewayDepositForBody
-            {
-                token = token, depositor = depositor, value = value.ToString(),
-            });
-            return PostAndResolveAsync("/gateway/deposit-for", body, $"gatewayDepositFor({depositor})", ct);
+            throw SignedRawTxRequired($"gatewayDepositFor({depositor})");
         }
 
         public static Task<string> GatewayInitiateWithdrawalAsync(string token, BigInteger value, CancellationToken ct = default)
         {
-            RequireToken();
-            if (string.IsNullOrWhiteSpace(token)) throw new ArgumentException("token required", nameof(token));
-            var body = JsonUtility.ToJson(new GatewayInitiateWithdrawalBody { token = token, value = value.ToString() });
-            return PostAndResolveAsync("/gateway/initiate-withdrawal", body, $"gatewayInitiateWithdrawal({token})", ct);
+            throw SignedRawTxRequired($"gatewayInitiateWithdrawal({token})");
         }
 
         public static Task<string> GatewayWithdrawAsync(string token, CancellationToken ct = default)
         {
-            RequireToken();
-            if (string.IsNullOrWhiteSpace(token)) throw new ArgumentException("token required", nameof(token));
-            var body = JsonUtility.ToJson(new GatewayWithdrawBody { token = token });
-            return PostAndResolveAsync("/gateway/withdraw", body, $"gatewayWithdraw({token})", ct);
+            throw SignedRawTxRequired($"gatewayWithdraw({token})");
         }
 
         /// <summary>
@@ -220,17 +219,7 @@ namespace ArcTrading.WebGL
             BigInteger value, string dataHex, int operation,
             CancellationToken ct = default)
         {
-            RequireToken();
-            if (string.IsNullOrWhiteSpace(account)) throw new ArgumentException("account required", nameof(account));
-            if (string.IsNullOrWhiteSpace(to)) throw new ArgumentException("to required", nameof(to));
-            if (string.IsNullOrEmpty(dataHex)) dataHex = "0x";
-            else if (!dataHex.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) dataHex = "0x" + dataHex;
-            var body = JsonUtility.ToJson(new TbaExecuteBody
-            {
-                account = account, to = to, value = value.ToString(),
-                data = dataHex, operation = operation,
-            });
-            return PostAndResolveAsync("/tba/execute", body, $"tbaExecute({account})", ct);
+            throw SignedRawTxRequired($"tbaExecute({account})");
         }
     }
 }

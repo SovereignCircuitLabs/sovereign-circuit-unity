@@ -98,6 +98,11 @@ public class ArcTradingContractClient : MonoBehaviour
       {""inputs"":[{""internalType"":""address"",""name"":""account"",""type"":""address""},{""internalType"":""address"",""name"":""operator"",""type"":""address""}],""name"":""isApprovedForAll"",""outputs"":[{""internalType"":""bool"",""name"":"""",""type"":""bool""}],""stateMutability"":""view"",""type"":""function""}
     ]";
 
+    private const string Erc20WriteAbi = @"[
+      {""constant"":false,""inputs"":[{""name"":""spender"",""type"":""address""},{""name"":""amount"",""type"":""uint256""}],""name"":""approve"",""outputs"":[{""name"":"""",""type"":""bool""}],""type"":""function""},
+      {""constant"":false,""inputs"":[{""name"":""to"",""type"":""address""},{""name"":""amount"",""type"":""uint256""}],""name"":""transfer"",""outputs"":[{""name"":"""",""type"":""bool""}],""type"":""function""}
+    ]";
+
     // ERC-6551 TBA execute(). Operator can call this after NpcCharacter binding is
     // honored by the account implementation's _isValidSigner.
     private const string Erc6551AccountAbi = @"[
@@ -119,12 +124,20 @@ public class ArcTradingContractClient : MonoBehaviour
     private void Awake()
     {
         readOnlyWeb3 = new Web3(rpcUrl);
+#if UNITY_WEBGL && !UNITY_EDITOR
+        ArcTrading.Crypto.EthRawTxSender.ConfigureRpc(rpcUrl);
+#endif
     }
 
     public async Task InitializeWalletAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var signer = await GetTraderSignerAsync();
+        WalletAddress = signer.address;
+#else
         var web3 = await CreateSignedWeb3Async();
         WalletAddress = web3.TransactionManager.Account.Address;
+#endif
     }
 
     /// <summary>
@@ -202,10 +215,16 @@ public class ArcTradingContractClient : MonoBehaviour
 
     public async Task<decimal> GetWalletBalanceUSDCAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var signer = await GetTraderSignerAsync();
+        var balanceWebgl = await ArcTrading.WebGL.WebGLChainApi.GetUsdcBalanceAsync(signer.address);
+        return FromUsdc(balanceWebgl);
+#else
         var web3 = await CreateSignedWeb3Async();
         var owner = web3.TransactionManager.Account.Address;
         var balance = await Erc20UsdcHelper.GetBalanceAsync(web3, owner);
         return FromUsdc(balance);
+#endif
     }
     
     public async Task<decimal> GetWalletBalanceUSDCAsync(string account)
@@ -265,8 +284,12 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<string> GetItemsAddressAsync()
     {
         if (!string.IsNullOrEmpty(cachedItemsAddress)) return cachedItemsAddress;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        cachedItemsAddress = await ArcTrading.WebGL.WebGLChainApi.GetItemsAddressAsync();
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         cachedItemsAddress = await contract.GetFunction("items").CallAsync<string>();
+#endif
         return cachedItemsAddress;
     }
 
@@ -613,76 +636,132 @@ public class ArcTradingContractClient : MonoBehaviour
 
     public async Task<string> SetManagerAsync(string managerAddress)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var signer = await GetTraderSignerAsync();
+        return await ArcTrading.Crypto.EthRawTxSender.SendFunctionAsync(
+            signer.address, signer.privateKey, contractAddress, Abi, "setManager",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(managerAddress),
+            new BigInteger(120000));
+#else
         var web3 = await CreateSignedWeb3Async();
         var contract = web3.Eth.GetContract(Abi, contractAddress);
         var fn = contract.GetFunction("setManager");
         var gas = new HexBigInteger(120000);
         return await fn.SendTransactionAsync(
             web3.TransactionManager.Account.Address, gas, null, managerAddress);
+#endif
     }
 
     // ----- GamePayment contract's owner-only gateway admin -----
 
     public async Task<string> SetGatewayAsync(string gatewayAddress)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var signer = await GetTraderSignerAsync();
+        return await ArcTrading.Crypto.EthRawTxSender.SendFunctionAsync(
+            signer.address, signer.privateKey, contractAddress, Abi, "setGateway",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(gatewayAddress),
+            new BigInteger(120000));
+#else
         var web3 = await CreateSignedWeb3Async();
         var contract = web3.Eth.GetContract(Abi, contractAddress);
         var fn = contract.GetFunction("setGateway");
         var gas = new HexBigInteger(120000);
         return await fn.SendTransactionAsync(
             web3.TransactionManager.Account.Address, gas, null, gatewayAddress);
+#endif
     }
 
     public async Task<string> DepositToGatewayAsync(decimal amountUSDC)
     {
-        var web3 = await CreateSignedWeb3Async();
         var amount = Erc20UsdcHelper.ParseUsdc(amountUSDC);
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var signer = await GetTraderSignerAsync();
+        return await ArcTrading.Crypto.EthRawTxSender.SendFunctionAsync(
+            signer.address, signer.privateKey, contractAddress, Abi, "depositToGateway",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(amount),
+            new BigInteger(250000));
+#else
+        var web3 = await CreateSignedWeb3Async();
         var contract = web3.Eth.GetContract(Abi, contractAddress);
         var fn = contract.GetFunction("depositToGateway");
         var gas = new HexBigInteger(250000);
         return await fn.SendTransactionAsync(
             web3.TransactionManager.Account.Address, gas, null, amount);
+#endif
     }
 
     public async Task<string> InitiateGatewayWithdrawalAsync(decimal amountUSDC)
     {
-        var web3 = await CreateSignedWeb3Async();
         var amount = Erc20UsdcHelper.ParseUsdc(amountUSDC);
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var signer = await GetTraderSignerAsync();
+        return await ArcTrading.Crypto.EthRawTxSender.SendFunctionAsync(
+            signer.address, signer.privateKey, contractAddress, Abi, "initiateGatewayWithdrawal",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(amount),
+            new BigInteger(200000));
+#else
+        var web3 = await CreateSignedWeb3Async();
         var contract = web3.Eth.GetContract(Abi, contractAddress);
         var fn = contract.GetFunction("initiateGatewayWithdrawal");
         var gas = new HexBigInteger(200000);
         return await fn.SendTransactionAsync(
             web3.TransactionManager.Account.Address, gas, null, amount);
+#endif
     }
 
     public async Task<string> CompleteGatewayWithdrawalAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var signer = await GetTraderSignerAsync();
+        return await ArcTrading.Crypto.EthRawTxSender.SendFunctionAsync(
+            signer.address, signer.privateKey, contractAddress, Abi, "completeGatewayWithdrawal",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(),
+            new BigInteger(200000));
+#else
         var web3 = await CreateSignedWeb3Async();
         var contract = web3.Eth.GetContract(Abi, contractAddress);
         var fn = contract.GetFunction("completeGatewayWithdrawal");
         var gas = new HexBigInteger(200000);
         return await fn.SendTransactionAsync(
             web3.TransactionManager.Account.Address, gas, null);
+#endif
     }
 
     public async Task<string> AddGatewayDelegateAsync(string delegateAddress)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var signer = await GetTraderSignerAsync();
+        return await ArcTrading.Crypto.EthRawTxSender.SendFunctionAsync(
+            signer.address, signer.privateKey, contractAddress, Abi, "addGatewayDelegate",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(delegateAddress),
+            new BigInteger(150000));
+#else
         var web3 = await CreateSignedWeb3Async();
         var contract = web3.Eth.GetContract(Abi, contractAddress);
         var fn = contract.GetFunction("addGatewayDelegate");
         var gas = new HexBigInteger(150000);
         return await fn.SendTransactionAsync(
             web3.TransactionManager.Account.Address, gas, null, delegateAddress);
+#endif
     }
 
     public async Task<string> RemoveGatewayDelegateAsync(string delegateAddress)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var signer = await GetTraderSignerAsync();
+        return await ArcTrading.Crypto.EthRawTxSender.SendFunctionAsync(
+            signer.address, signer.privateKey, contractAddress, Abi, "removeGatewayDelegate",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(delegateAddress),
+            new BigInteger(150000));
+#else
         var web3 = await CreateSignedWeb3Async();
         var contract = web3.Eth.GetContract(Abi, contractAddress);
         var fn = contract.GetFunction("removeGatewayDelegate");
         var gas = new HexBigInteger(150000);
         return await fn.SendTransactionAsync(
             web3.TransactionManager.Account.Address, gas, null, delegateAddress);
+#endif
     }
 
     public async Task<decimal> GetGatewayAvailableBalanceUSDCAsync()
@@ -690,10 +769,17 @@ public class ArcTradingContractClient : MonoBehaviour
         var arcNanopayment = GetComponent<ArcNanopaymentClient>();
         if (arcNanopayment == null) return 0m;
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var signer = await GetTraderSignerAsync();
+        var balance = await arcNanopayment.GatewayAvailableBalanceAsync(
+            Erc20UsdcHelper.ArcUsdcAddress,
+            signer.address);
+#else
         var web3 = await CreateSignedWeb3Async();
         var balance = await arcNanopayment.GatewayAvailableBalanceAsync(
             Erc20UsdcHelper.ArcUsdcAddress,
             web3.TransactionManager.Account.Address);
+#endif
         var onchain = FromUsdc(balance);
         
         if (gatewayBaselineInitialized && onchain < lastKnownOnchainGatewayUsdc)
@@ -739,10 +825,14 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<string> MintRandomAsync(BigInteger itemIdToBeMinted, bool nanopayment = false)
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
-        // WebGL: server's admin executor handles approval + mint atomically. The
-        // x402 variant routes funds via the server's Gateway depositor; the
-        // non-x402 variant pulls USDC from the server's spending wallet. In both
-        // cases the client never holds a private key.
+        // nanopayment=true is the ONLY WebGL path that works without local signing:
+        // /game/mint-random-x402 takes `to=tba` as a contract arg, so the server's
+        // serverAccount can call it on the player's behalf without forging identity
+        // (server is paying its own x402 dispatcher cost). The minted NFT lands at
+        // the player's TBA. This is fine.
+        //
+        // nanopayment=false (plain mintRandom from TBA's USDC) requires the NPC's
+        // paymentWallet to sign — TODO Phase 5 via IEthCryptoBackend + /tx/send-raw.
         if (nanopayment)
         {
             if (nftTokenId == 0)
@@ -751,8 +841,23 @@ public class ArcTradingContractClient : MonoBehaviour
             var tbaWebgl = await EnsureTbaAddressAsync();
             return await ArcTrading.WebGL.WebGLWalletApi.MintRandomX402Async(tbaWebgl);
         }
+
         var maxBuyPriceWebgl = await GetMaxBuyPriceAsync();
-        return await ArcTrading.WebGL.WebGLWalletApi.MintRandomAsync(maxBuyPriceWebgl);
+        var trader = await GetTraderSignerAsync();
+        await EnsureWebGLUsdcApprovalAsync(
+            trader.address,
+            trader.privateKey,
+            contractAddress,
+            maxBuyPriceWebgl);
+
+        return await ArcTrading.Crypto.EthRawTxSender.SendFunctionAsync(
+            trader.address,
+            trader.privateKey,
+            contractAddress,
+            Abi,
+            "mintRandom",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(maxBuyPriceWebgl),
+            new BigInteger(300000));
 #else
         if (nanopayment)
         {
@@ -799,14 +904,53 @@ public class ArcTradingContractClient : MonoBehaviour
     
     /// <summary>
     /// Sell one NFT held by the NPC's ERC-6551 TBA.
-    /// Desktop: signed by the paymentWallet, routed through the TBA execute() call.
-    /// WebGL: the server's admin executor signs and routes everything; <paramref name="tbaAddress"/>
-    /// is decorative (server picks the holding TBA based on its own configured identity).
+    /// Desktop: signed by the local paymentWallet, routed through the TBA execute() call.
+    /// WebGL: TODO Phase 5 — must locally sign TBA.execute(sellItem(itemId)) using the
+    /// in-browser paymentWallet (generated via jslib + viem), then broadcast through
+    /// the server's POST /tx/send-raw relay. Routing it through a server-held wallet
+    /// would turn the operational paymentWallet into a custodial key, which violates
+    /// the binding architecture (see [[npc-payment-binding-architecture]]).
     /// </summary>
     public async Task<string> SellItemAsync(string tbaAddress, BigInteger itemId)
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
-        return await ArcTrading.WebGL.WebGLWalletApi.SellItemAsync(itemId);
+        if (npcPaymentWalletService == null)
+            throw new InvalidOperationException(
+                $"{name}: SellItemAsync needs NpcPaymentWalletService to resolve the operator key.");
+
+        var signer = await npcPaymentWalletService.EnsureBoundOrRebindAsync(NftTokenId);
+        var itemsAddr = await GetItemsAddressAsync();
+
+        var approved = await ArcTrading.WebGL.WebGLChainApi.GetErc1155IsApprovedForAllAsync(
+            itemsAddr, tbaAddress, contractAddress);
+        if (!approved)
+        {
+            var setApprovalData = ArcTrading.Crypto.WebGLAbiBridge.EncodeFunctionData(
+                Erc1155Abi,
+                "setApprovalForAll",
+                ArcTrading.Crypto.EthRawTxSender.JsonArgs(contractAddress, true));
+            await ArcTrading.Crypto.EthRawTxSender.SendTbaExecuteAsync(
+                signer.Address,
+                signer.PrivateKey,
+                tbaAddress,
+                itemsAddr,
+                BigInteger.Zero,
+                setApprovalData,
+                new BigInteger(200000));
+        }
+
+        var sellItemData = ArcTrading.Crypto.WebGLAbiBridge.EncodeFunctionData(
+            Abi,
+            "sellItem",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(itemId));
+        return await ArcTrading.Crypto.EthRawTxSender.SendTbaExecuteAsync(
+            signer.Address,
+            signer.PrivateKey,
+            tbaAddress,
+            contractAddress,
+            BigInteger.Zero,
+            sellItemData,
+            new BigInteger(400000));
 #else
         if (npcPaymentWalletService == null)
             throw new InvalidOperationException(
@@ -846,6 +990,31 @@ public class ArcTradingContractClient : MonoBehaviour
         return new Web3(account, rpcUrl);
     }
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+    private async Task EnsureWebGLUsdcApprovalAsync(
+        string owner,
+        string privateKeyForOwner,
+        string spender,
+        BigInteger amount)
+    {
+        var balance = await ArcTrading.WebGL.WebGLChainApi.GetUsdcBalanceAsync(owner);
+        if (balance < amount)
+            throw new InvalidOperationException($"Insufficient USDC balance. Have={balance}, Need={amount}");
+
+        var allowance = await ArcTrading.WebGL.WebGLChainApi.GetUsdcAllowanceAsync(owner, spender);
+        if (allowance >= amount) return;
+
+        await ArcTrading.Crypto.EthRawTxSender.SendFunctionAsync(
+            owner,
+            privateKeyForOwner,
+            Erc20UsdcHelper.ArcUsdcAddress,
+            Erc20WriteAbi,
+            "approve",
+            ArcTrading.Crypto.EthRawTxSender.JsonArgs(spender, amount),
+            new BigInteger(100000));
+    }
+#endif
+
     private async Task<string> SendTbaExecuteAsync(
         Web3 operatorWeb3, string tbaAddress, string target,
         byte[] data, HexBigInteger gas, bool waitForReceipt)
@@ -881,6 +1050,13 @@ public class ArcTradingContractClient : MonoBehaviour
             }
             await Task.Delay(800);
         }
+    }
+
+    public async Task<(string address, string privateKey)> GetTraderSignerAsync()
+    {
+        var pk = await ResolveTraderPrivateKeyAsync();
+        var address = ArcTrading.Crypto.EthCryptoBackend.Current.DeriveAddress(pk);
+        return (address, pk);
     }
 
     private async Task<Web3> CreateSignedWeb3Async()

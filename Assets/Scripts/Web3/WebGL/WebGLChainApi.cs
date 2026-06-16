@@ -223,6 +223,12 @@ namespace ArcTrading.WebGL
             return ParseBig(dto.baselinePrice ?? dto.BASELINE_PRICE);
         }
 
+        public static async Task<string> GetItemsAddressAsync(CancellationToken ct = default)
+        {
+            var dto = await ArcTradingApiClient.GetJsonAsync<GameConfigResponse>("/game/config", ct).ConfigureAwait(true);
+            return dto?.itemsAddress ?? dto?.items;
+        }
+
         // --------------------- ERC1155 (single id read) ---------------------
 
         public static async Task<BigInteger> GetErc1155BalanceAsync(
@@ -232,6 +238,22 @@ namespace ArcTrading.WebGL
             var dto = await ArcTradingApiClient.GetJsonAsync<Erc1155BalanceResponse>(
                 $"/erc1155/{tokenContract}/balance/{account}/{id}", ct).ConfigureAwait(true);
             return ParseBig(dto?.balance);
+        }
+
+        [Serializable] public class Erc1155ApprovalResponse
+        {
+            public string token; public string account; public string @operator;
+            public bool approved;
+        }
+
+        public static async Task<bool> GetErc1155IsApprovedForAllAsync(
+            string tokenContract, string account, string operatorAddr, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(tokenContract) || string.IsNullOrWhiteSpace(account) || string.IsNullOrWhiteSpace(operatorAddr))
+                return false;
+            var dto = await ArcTradingApiClient.GetJsonAsync<Erc1155ApprovalResponse>(
+                $"/erc1155/{tokenContract}/approval/{account}/{operatorAddr}", ct).ConfigureAwait(true);
+            return dto != null && dto.approved;
         }
 
         // --------------------- TBA inventory ---------------------

@@ -1,7 +1,7 @@
 using System;
 using System.Numerics;
 using System.Threading.Tasks;
-using Nethereum.Signer;
+using ArcTrading.Crypto;
 using UnityEngine;
 
 public readonly struct NpcPaymentSigner
@@ -177,7 +177,7 @@ public class NpcPaymentWalletService : MonoBehaviour
         }
 
         // check if the on-disk address column was tampered with but the PK was not
-        var derived = new EthECKey(pk).GetPublicAddress();
+        var derived = EthCryptoBackend.Current.DeriveAddress(pk);
         if (!AddressEquals(derived, chainWallet))
         {
             vault.Forget(contractAddr, chainId, tokenId);
@@ -199,12 +199,16 @@ public class NpcPaymentWalletService : MonoBehaviour
     private async Task<NpcPaymentSigner> GenerateAndBindAsync(
         BigInteger tokenId, string contractAddr, long chainId)
     {
-        var key = EthECKey.GenerateKey();
-        var pk = key.GetPrivateKey();
-        var addr = key.GetPublicAddress();
+        // Routed via IEthCryptoBackend so the WebGL build picks up viem-in-browser
+        // keygen instead of Nethereum (which doesn't run inside the WASM sandbox).
+        // Desktop / Editor still resolves to NethereumCryptoBackend — bit-for-bit
+        // identical to the previous EthECKey.GenerateKey() path.
+        var generated = await EthCryptoBackend.Current.GenerateKeyAsync().ConfigureAwait(true);
+        var pk = generated.PrivateKey;
+        var addr = generated.Address;
 
         await npcContract.BindPaymentWalletAsync(tokenId, addr);
-        
+
         // confirmation
         var (verifyWallet, verifyVersion) = await npcContract.GetPaymentBindingAsync(tokenId);
         if (!AddressEquals(verifyWallet, addr))
