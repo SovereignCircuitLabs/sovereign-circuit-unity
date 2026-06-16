@@ -181,34 +181,54 @@ public class NpcCharacterContractClient : MonoBehaviour
 
     public async Task<(string wallet, ulong version)> GetPaymentBindingAsync(BigInteger tokenId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.GetPaymentBindingAsync(tokenId);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
         var fn = contract.GetFunction("getPaymentBinding");
         var dto = await fn.CallDeserializingToObjectAsync<PaymentBindingDTO>(tokenId);
         return (dto.Wallet, dto.Version);
+#endif
     }
 
     public async Task<string> OwnerOfAsync(BigInteger tokenId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.NpcOwnerOfAsync(tokenId);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
         return await contract.GetFunction("ownerOf").CallAsync<string>(tokenId);
+#endif
     }
 
     public async Task<bool> ExistsAsync(BigInteger tokenId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.NpcExistsAsync(tokenId);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
         return await contract.GetFunction("exists").CallAsync<bool>(tokenId);
+#endif
     }
 
     public async Task<BigInteger> BalanceOfAsync(string owner)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.NpcBalanceOfAsync(owner);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
         return await contract.GetFunction("balanceOf").CallAsync<BigInteger>(owner);
+#endif
     }
 
     public async Task<BigInteger> GetNextTokenIdAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.NpcNextTokenIdAsync();
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
         return await contract.GetFunction("nextTokenId").CallAsync<BigInteger>();
+#endif
     }
 
     public async Task<NpcDataDTO> GetNpcAsync(BigInteger tokenId)
@@ -275,6 +295,9 @@ public class NpcCharacterContractClient : MonoBehaviour
 
     public async Task<string> BindPaymentWalletAsync(BigInteger tokenId, string walletAddress)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLWalletApi.BindPaymentWalletAsync(tokenId, walletAddress);
+#else
         var data = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress)
             .GetFunction("bindPaymentWallet")
             .GetData(tokenId, walletAddress)
@@ -286,10 +309,14 @@ public class NpcCharacterContractClient : MonoBehaviour
             gas: new HexBigInteger(120000),
             waitReceipt: true,
             label: $"bindPaymentWallet(tokenId={tokenId})");
+#endif
     }
 
     public async Task<string> ClearPaymentWalletAsync(BigInteger tokenId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLWalletApi.ClearPaymentWalletAsync(tokenId);
+#else
         var data = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress)
             .GetFunction("clearPaymentWallet")
             .GetData(tokenId)
@@ -301,6 +328,7 @@ public class NpcCharacterContractClient : MonoBehaviour
             gas: new HexBigInteger(80000),
             waitReceipt: true,
             label: $"clearPaymentWallet(tokenId={tokenId})");
+#endif
     }
 
     public async Task<string> TransferUsdcFromOwnerAsync(string toAddress, BigInteger amount)
@@ -310,6 +338,12 @@ public class NpcCharacterContractClient : MonoBehaviour
         if (amount <= BigInteger.Zero)
             throw new ArgumentException("amount must be positive", nameof(amount));
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // Server's admin wallet pays; the "owner" identity is whoever the server
+        // is configured to act as. Semantically different from Desktop where the
+        // NFT owner's PK pays — call sites should still see funds land at toAddress.
+        return await ArcTrading.WebGL.WebGLWalletApi.UsdcTransferAsync(toAddress, amount);
+#else
         var data = readOnlyWeb3.Eth.GetContract(Erc20TransferAbi, Erc20UsdcHelper.ArcUsdcAddress)
             .GetFunction("transfer")
             .GetData(toAddress, amount)
@@ -321,6 +355,7 @@ public class NpcCharacterContractClient : MonoBehaviour
             gas: new HexBigInteger(120000),
             waitReceipt: true,
             label: $"USDC transfer → {Shorten(toAddress)} ({amount})");
+#endif
     }
 
     /// <summary>
@@ -339,6 +374,14 @@ public class NpcCharacterContractClient : MonoBehaviour
         if (string.IsNullOrWhiteSpace(target))
             throw new ArgumentException("target is required", nameof(target));
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // The server's /tba/execute route packs (target,value,data,operation) into
+        // the TBA's execute() itself, so we forward the inner call rather than the
+        // pre-encoded execute calldata.
+        var dataHex = data == null || data.Length == 0 ? "0x" : "0x" + ToHexString(data);
+        return await ArcTrading.WebGL.WebGLWalletApi.TbaExecuteAsync(
+            tbaAddress, target, value, dataHex, operation: 0);
+#else
         var executeCalldata = readOnlyWeb3.Eth.GetContract(Erc6551AccountAbi, tbaAddress)
             .GetFunction("execute")
             .GetData(target, value, data ?? Array.Empty<byte>(), (byte)0)
@@ -350,7 +393,18 @@ public class NpcCharacterContractClient : MonoBehaviour
             gas: gas,
             waitReceipt: waitForReceipt,
             label: $"TBA.execute → {Shorten(target)}");
+#endif
     }
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    private static string ToHexString(byte[] bytes)
+    {
+        if (bytes == null || bytes.Length == 0) return string.Empty;
+        var sb = new System.Text.StringBuilder(bytes.Length * 2);
+        for (int i = 0; i < bytes.Length; i++) sb.Append(bytes[i].ToString("x2"));
+        return sb.ToString();
+    }
+#endif
 
     // ---------------- shared owner-tx submission ----------------
 

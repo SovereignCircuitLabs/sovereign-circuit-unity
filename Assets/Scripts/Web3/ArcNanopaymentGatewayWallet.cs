@@ -42,15 +42,23 @@ namespace ArcTrading.Nanopayment
         public async Task<string> ApproveIfNeededThenGatewayDepositAsync(decimal amountUsdc)
         {
             var amount = Erc20UsdcHelper.ParseUsdc(amountUsdc);
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // Server-side deposit route handles approve internally if needed.
+            return await ArcTrading.WebGL.WebGLWalletApi.GatewayDepositAsync(Erc20UsdcHelper.ArcUsdcAddress, amount);
+#else
             var web3 = await CreateSignedGatewayWeb3Async();
 
             await Erc20UsdcHelper.EnsureApprovalAsync(web3, gatewayContractAddress, amount);
 
             return await GatewayDepositAsync(Erc20UsdcHelper.ArcUsdcAddress, amount);
+#endif
         }
 
         public async Task<string> GatewayDepositAsync(string tokenAddress, BigInteger value)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return await ArcTrading.WebGL.WebGLWalletApi.GatewayDepositAsync(tokenAddress, value);
+#else
             var web3 = await CreateSignedGatewayWeb3Async();
             var contract = web3.Eth.GetContract(GatewayWalletAbi, gatewayContractAddress);
             var fn = contract.GetFunction("deposit");
@@ -62,10 +70,14 @@ namespace ArcTrading.Nanopayment
                 null,
                 tokenAddress,
                 value);
+#endif
         }
 
         public async Task<string> GatewayDepositForAsync(string tokenAddress, string depositor, BigInteger value)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return await ArcTrading.WebGL.WebGLWalletApi.GatewayDepositForAsync(tokenAddress, depositor, value);
+#else
             var web3 = await CreateSignedGatewayWeb3Async();
             var contract = web3.Eth.GetContract(GatewayWalletAbi, gatewayContractAddress);
             var fn = contract.GetFunction("depositFor");
@@ -78,10 +90,14 @@ namespace ArcTrading.Nanopayment
                 tokenAddress,
                 depositor,
                 value);
+#endif
         }
 
         public async Task<string> GatewayInitiateWithdrawalAsync(string tokenAddress, BigInteger value)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return await ArcTrading.WebGL.WebGLWalletApi.GatewayInitiateWithdrawalAsync(tokenAddress, value);
+#else
             var web3 = await CreateSignedGatewayWeb3Async();
             var contract = web3.Eth.GetContract(GatewayWalletAbi, gatewayContractAddress);
             var fn = contract.GetFunction("initiateWithdrawal");
@@ -93,10 +109,14 @@ namespace ArcTrading.Nanopayment
                 null,
                 tokenAddress,
                 value);
+#endif
         }
 
         public async Task<string> GatewayWithdrawAsync(string tokenAddress)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return await ArcTrading.WebGL.WebGLWalletApi.GatewayWithdrawAsync(tokenAddress);
+#else
             var web3 = await CreateSignedGatewayWeb3Async();
             var contract = web3.Eth.GetContract(GatewayWalletAbi, gatewayContractAddress);
             var fn = contract.GetFunction("withdraw");
@@ -107,50 +127,75 @@ namespace ArcTrading.Nanopayment
                 gas,
                 null,
                 tokenAddress);
+#endif
         }
 
         // --------- Read (view) calls ---------
 
         public async Task<BigInteger> GatewayTotalBalanceAsync(string tokenAddress, string depositor)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return await ArcTrading.WebGL.WebGLChainApi.GetGatewayTotalBalanceAsync(tokenAddress, depositor);
+#else
             var contract = gatewayReadOnlyWeb3.Eth.GetContract(GatewayWalletAbi, gatewayContractAddress);
             var fn = contract.GetFunction("totalBalance");
             return await fn.CallAsync<BigInteger>(tokenAddress, depositor);
+#endif
         }
 
         public async Task<BigInteger> GatewayAvailableBalanceAsync(string tokenAddress, string depositor)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return await ArcTrading.WebGL.WebGLChainApi.GetGatewayAvailableBalanceAsync(tokenAddress, depositor);
+#else
             var contract = gatewayReadOnlyWeb3.Eth.GetContract(GatewayWalletAbi, gatewayContractAddress);
             var fn = contract.GetFunction("availableBalance");
             return await fn.CallAsync<BigInteger>(tokenAddress, depositor);
+#endif
         }
 
         public async Task<BigInteger> GatewayWithdrawingBalanceAsync(string tokenAddress, string depositor)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return await ArcTrading.WebGL.WebGLChainApi.GetGatewayWithdrawingBalanceAsync(tokenAddress, depositor);
+#else
             var contract = gatewayReadOnlyWeb3.Eth.GetContract(GatewayWalletAbi, gatewayContractAddress);
             var fn = contract.GetFunction("withdrawingBalance");
             return await fn.CallAsync<BigInteger>(tokenAddress, depositor);
+#endif
         }
 
         public async Task<BigInteger> GatewayWithdrawableBalanceAsync(string tokenAddress, string depositor)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return await ArcTrading.WebGL.WebGLChainApi.GetGatewayWithdrawableBalanceAsync(tokenAddress, depositor);
+#else
             var contract = gatewayReadOnlyWeb3.Eth.GetContract(GatewayWalletAbi, gatewayContractAddress);
             var fn = contract.GetFunction("withdrawableBalance");
             return await fn.CallAsync<BigInteger>(tokenAddress, depositor);
+#endif
         }
 
         public async Task<BigInteger> GatewayWithdrawalDelayAsync()
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return await ArcTrading.WebGL.WebGLChainApi.GetGatewayWithdrawalDelayAsync();
+#else
             var contract = gatewayReadOnlyWeb3.Eth.GetContract(GatewayWalletAbi, gatewayContractAddress);
             var fn = contract.GetFunction("withdrawalDelay");
             return await fn.CallAsync<BigInteger>();
+#endif
         }
 
         public async Task<BigInteger> GatewayWithdrawalBlockAsync(string tokenAddress, string depositor)
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return await ArcTrading.WebGL.WebGLChainApi.GetGatewayWithdrawalBlockAsync(tokenAddress, depositor);
+#else
             var contract = gatewayReadOnlyWeb3.Eth.GetContract(GatewayWalletAbi, gatewayContractAddress);
             var fn = contract.GetFunction("withdrawalBlock");
             return await fn.CallAsync<BigInteger>(tokenAddress, depositor);
+#endif
         }
 
         // --------- Helpers ---------

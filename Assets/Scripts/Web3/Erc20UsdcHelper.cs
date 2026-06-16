@@ -34,6 +34,11 @@ public static class Erc20UsdcHelper
 
     public static async Task<string> ApproveAsync(Web3 web3, string owner, string spender, BigInteger amount)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // WebGL: server's admin signer approves on behalf of its own wallet.
+        // The `owner` parameter is silently dropped — the server is the owner.
+        return await ArcTrading.WebGL.WebGLWalletApi.UsdcApproveAsync(spender, amount);
+#else
         var usdc = web3.Eth.GetContract(Erc20Abi, ArcUsdcAddress);
         var approveFn = usdc.GetFunction("approve");
         return await approveFn.SendTransactionAsync(
@@ -42,10 +47,14 @@ public static class Erc20UsdcHelper
             null,
             spender,
             amount);
+#endif
     }
 
     public static async Task<string> TransferAsync(Web3 web3, string to, BigInteger amount)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLWalletApi.UsdcTransferAsync(to, amount);
+#else
         var usdc = web3.Eth.GetContract(Erc20Abi, ArcUsdcAddress);
         var transferFn = usdc.GetFunction("transfer");
         var from = web3.TransactionManager.Account.Address;
@@ -55,6 +64,7 @@ public static class Erc20UsdcHelper
             null,
             to,
             amount);
+#endif
     }
 
     // Make sure `spender` is allowed to pull at least `amount` USDC from the signer's wallet.
@@ -62,6 +72,13 @@ public static class Erc20UsdcHelper
     // Awaits the approve receipt so the next tx sent by the caller sees the new allowance.
     public static async Task EnsureApprovalAsync(Web3 web3, string spender, BigInteger amount)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // Server-side admin wallet: query its own allowance against `spender`.
+        // We don't know the server's address up-front, so the most pragmatic check
+        // is to ask /usdc/approve to top up if needed — the route itself short-
+        // circuits on already-sufficient allowance in the service layer.
+        await ArcTrading.WebGL.WebGLWalletApi.UsdcApproveAsync(spender, amount);
+#else
         var owner = web3.TransactionManager.Account.Address;
 
         var balance = await GetBalanceAsync(web3, owner);
@@ -73,5 +90,6 @@ public static class Erc20UsdcHelper
 
         var approveTx = await ApproveAsync(web3, owner, spender, amount);
         await web3.Eth.Transactions.GetTransactionReceipt.SendRequestAsync(approveTx);
+#endif
     }
 }

@@ -167,8 +167,12 @@ public class ArcTradingContractClient : MonoBehaviour
             throw new InvalidOperationException(
                 $"{name}: nftTokenId is 0 — cannot resolve TBA on chain.");
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var tba = await ArcTrading.WebGL.WebGLChainApi.GetNpcTbaAsync(NftTokenId);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var tba = await contract.GetFunction("npcTba").CallAsync<string>(NftTokenId);
+#endif
         Debug.Log($"[{name}] Resolved TBA address {tba} for NPC tokenId {nftTokenId} via GamePayment.npcTba.");
         if (string.IsNullOrWhiteSpace(tba) || IsZeroAddress(tba))
             throw new InvalidOperationException(
@@ -207,7 +211,11 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<decimal> GetWalletBalanceUSDCAsync(string account)
     {
         if (string.IsNullOrWhiteSpace(account)) return 0m;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var balance = await ArcTrading.WebGL.WebGLChainApi.GetUsdcBalanceAsync(account);
+#else
         var balance = await Erc20UsdcHelper.GetBalanceAsync(readOnlyWeb3, account);
+#endif
         return FromUsdc(balance);
     }
 
@@ -219,6 +227,23 @@ public class ArcTradingContractClient : MonoBehaviour
     {
         if (string.IsNullOrWhiteSpace(account)) return 0m;
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var items = await ArcTrading.WebGL.WebGLChainApi.GetTbaItemBalancesAsync(account);
+        var sellPricesArr = await ArcTrading.WebGL.WebGLChainApi.GetAllSellPricesRawAsync();
+        BigInteger totalUnits = BigInteger.Zero;
+        if (items?.balances != null)
+        {
+            int n = Math.Min(items.balances.Length, sellPricesArr.Length);
+            for (int i = 0; i < n; i++)
+            {
+                if (string.IsNullOrEmpty(items.balances[i])) continue;
+                var bal = BigInteger.Parse(items.balances[i]);
+                if (bal == BigInteger.Zero) continue;
+                totalUnits += bal * sellPricesArr[i];
+            }
+        }
+        return FromUsdc(totalUnits);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
 
         var balances = await contract.GetFunction("getTbaItemBalances")
@@ -232,6 +257,7 @@ public class ArcTradingContractClient : MonoBehaviour
             totalUnits += balances.Balances[i] * sellPrices[i];
         }
         return FromUsdc(totalUnits);
+#endif
     }
 
     // ---- Item / NFT queries ----
@@ -247,40 +273,63 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<BigInteger[]> GetItemIdsAsync()
     {
         if (cachedItemIds != null) return cachedItemIds;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        cachedItemIds = await ArcTrading.WebGL.WebGLChainApi.GetItemIdsAsync();
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var ids = await contract.GetFunction("getItemIds").CallAsync<List<BigInteger>>();
         cachedItemIds = ids.ToArray();
+#endif
         return cachedItemIds;
     }
 
     public async Task<decimal> GetSellPriceUSDCAsync(BigInteger itemId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var price = await ArcTrading.WebGL.WebGLChainApi.GetSellPriceAsync(itemId);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var price = await contract.GetFunction("getSellPrice").CallAsync<BigInteger>(itemId);
+#endif
         return FromUsdc(price);
     }
 
     public async Task<decimal[]> GetAllSellPricesUSDCAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var raw = await ArcTrading.WebGL.WebGLChainApi.GetAllSellPricesRawAsync();
+        var prices = new decimal[raw.Length];
+        for (int i = 0; i < raw.Length; i++) prices[i] = FromUsdc(raw[i]);
+        return prices;
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var raw = await contract.GetFunction("getAllSellPrices").CallAsync<List<BigInteger>>();
         var prices = new decimal[raw.Count];
         for (int i = 0; i < raw.Count; i++) prices[i] = FromUsdc(raw[i]);
         return prices;
+#endif
     }
 
     public async Task<BigInteger[]> GetAllBuyPricesRawAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.GetAllBuyPricesRawAsync();
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var raw = await contract.GetFunction("getAllBuyPrices").CallAsync<List<BigInteger>>();
         return raw.ToArray();
+#endif
     }
 
     public async Task<BigInteger[]> GetAllSellPricesRawAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.GetAllSellPricesRawAsync();
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var raw = await contract.GetFunction("getAllSellPrices").CallAsync<List<BigInteger>>();
         return raw.ToArray();
+#endif
     }
 
     /// <summary>
@@ -303,18 +352,36 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<int> GetNftInventoryCountAsync(string account)
     {
         if (string.IsNullOrWhiteSpace(account)) return 0;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var items = await ArcTrading.WebGL.WebGLChainApi.GetTbaItemBalancesAsync(account);
+        int total = 0;
+        if (items?.balances != null)
+        {
+            for (int i = 0; i < items.balances.Length; i++)
+            {
+                if (string.IsNullOrEmpty(items.balances[i])) continue;
+                total += (int)BigInteger.Parse(items.balances[i]);
+            }
+        }
+        return total;
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var dto = await contract.GetFunction("getTbaItemBalances")
             .CallDeserializingToObjectAsync<GetTbaItemBalancesOutputDTO>(account);
         int total = 0;
         for (int i = 0; i < dto.Balances.Count; i++) total += (int)dto.Balances[i];
         return total;
+#endif
     }
 
     public async Task<BigInteger> GetCirculatingSupplyAsync(BigInteger itemId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.GetCirculatingSupplyAsync(itemId);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         return await contract.GetFunction("circulatingSupply").CallAsync<BigInteger>(itemId);
+#endif
     }
 
     public async Task<BigInteger> GetActiveTypeCountAsync()
@@ -325,25 +392,40 @@ public class ArcTradingContractClient : MonoBehaviour
     
     public async Task<decimal> GetMintPriceUSDCAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var price = await ArcTrading.WebGL.WebGLChainApi.GetBaselinePriceAsync();
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var price = await contract.GetFunction("BASELINE_PRICE").CallAsync<BigInteger>();
+#endif
         return FromUsdc(price);
     }
 
     public async Task<decimal> GetBuyPriceUSDCAsync(BigInteger itemId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var price = await ArcTrading.WebGL.WebGLChainApi.GetBuyPriceAsync(itemId);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var price = await contract.GetFunction("getBuyPrice").CallAsync<BigInteger>(itemId);
+#endif
         return FromUsdc(price);
     }
 
     public async Task<decimal[]> GetAllBuyPricesUSDCAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var raw = await ArcTrading.WebGL.WebGLChainApi.GetAllBuyPricesRawAsync();
+        var prices = new decimal[raw.Length];
+        for (int i = 0; i < raw.Length; i++) prices[i] = FromUsdc(raw[i]);
+        return prices;
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var raw = await contract.GetFunction("getAllBuyPrices").CallAsync<List<BigInteger>>();
         var prices = new decimal[raw.Count];
         for (int i = 0; i < raw.Count; i++) prices[i] = FromUsdc(raw[i]);
         return prices;
+#endif
     }
 
     /// <summary>
@@ -372,8 +454,12 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<BigInteger> GetNftBalanceAsync(string account, BigInteger itemId)
     {
         var itemsAddr = await GetItemsAddressAsync();
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.GetErc1155BalanceAsync(itemsAddr, account, itemId);
+#else
         var items = readOnlyWeb3.Eth.GetContract(Erc1155Abi, itemsAddr);
         return await items.GetFunction("balanceOf").CallAsync<BigInteger>(account, itemId);
+#endif
     }
 
     /// <summary>
@@ -384,79 +470,137 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<BigInteger?> FindFirstOwnedItemIdAsync(string account)
     {
         if (string.IsNullOrWhiteSpace(account)) return null;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var items = await ArcTrading.WebGL.WebGLChainApi.GetTbaOwnedItemsAsync(account);
+        if (items?.ids == null || items.ids.Length == 0) return null;
+        return BigInteger.Parse(items.ids[0]);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var dto = await contract.GetFunction("getTbaOwnedItems")
             .CallDeserializingToObjectAsync<GetTbaOwnedItemsOutputDTO>(account);
         if (dto.Ids == null || dto.Ids.Count == 0) return null;
         return dto.Ids[0];
+#endif
     }
 
     public async Task<decimal> GetContractTotalUsdcAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var g = await ArcTrading.WebGL.WebGLChainApi.GetGamePaymentGatewayAsync();
+        return FromUsdc(string.IsNullOrEmpty(g?.contractBalance) ? BigInteger.Zero : BigInteger.Parse(g.contractBalance));
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var fn = contract.GetFunction("getContractBalance");
         var balance = await fn.CallAsync<BigInteger>();
         return FromUsdc(balance);
+#endif
     }
 
     // ----- GamePayment contract's own Circle Gateway state (owner-managed pool) -----
 
     public async Task<string> GetConfiguredGatewayAddressAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // Server's /game/config exposes the gateway address via constants(); the route
+        // accepts either casing depending on TS-side naming. Both fields are read.
+        var cfg = await ArcTrading.WebGL.ArcTradingApiClient.GetJsonAsync<ArcTrading.WebGL.WebGLChainApi.GameConfigResponse>("/game/config");
+        return !string.IsNullOrEmpty(cfg?.gatewayAddress) ? cfg.gatewayAddress : cfg?.gateway;
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         return await contract.GetFunction("gateway").CallAsync<string>();
+#endif
     }
 
     public async Task<decimal> GetContractGatewayAvailableUSDCAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var g = await ArcTrading.WebGL.WebGLChainApi.GetGamePaymentGatewayAsync();
+        return FromUsdc(string.IsNullOrEmpty(g?.availableBalance) ? BigInteger.Zero : BigInteger.Parse(g.availableBalance));
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var balance = await contract.GetFunction("gatewayAvailableBalance").CallAsync<BigInteger>();
         return FromUsdc(balance);
+#endif
     }
 
     public async Task<decimal> GetContractGatewayWithdrawableUSDCAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var g = await ArcTrading.WebGL.WebGLChainApi.GetGamePaymentGatewayAsync();
+        return FromUsdc(string.IsNullOrEmpty(g?.withdrawableBalance) ? BigInteger.Zero : BigInteger.Parse(g.withdrawableBalance));
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var balance = await contract.GetFunction("gatewayWithdrawableBalance").CallAsync<BigInteger>();
         return FromUsdc(balance);
+#endif
     }
 
     public async Task<decimal> GetContractGatewayWithdrawingUSDCAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var g = await ArcTrading.WebGL.WebGLChainApi.GetGamePaymentGatewayAsync();
+        return FromUsdc(string.IsNullOrEmpty(g?.withdrawingBalance) ? BigInteger.Zero : BigInteger.Parse(g.withdrawingBalance));
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var balance = await contract.GetFunction("gatewayWithdrawingBalance").CallAsync<BigInteger>();
         return FromUsdc(balance);
+#endif
     }
 
     public async Task<decimal> GetContractGatewayTotalUSDCAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var g = await ArcTrading.WebGL.WebGLChainApi.GetGamePaymentGatewayAsync();
+        return FromUsdc(string.IsNullOrEmpty(g?.totalBalance) ? BigInteger.Zero : BigInteger.Parse(g.totalBalance));
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         var balance = await contract.GetFunction("gatewayTotalBalance").CallAsync<BigInteger>();
         return FromUsdc(balance);
+#endif
     }
 
     public async Task<BigInteger> GetContractGatewayWithdrawalBlockAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var g = await ArcTrading.WebGL.WebGLChainApi.GetGamePaymentGatewayAsync();
+        return string.IsNullOrEmpty(g?.withdrawalBlock) ? BigInteger.Zero : BigInteger.Parse(g.withdrawalBlock);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         return await contract.GetFunction("gatewayWithdrawalBlock").CallAsync<BigInteger>();
+#endif
     }
 
     public async Task<BigInteger> GetContractGatewayWithdrawalDelayAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var g = await ArcTrading.WebGL.WebGLChainApi.GetGamePaymentGatewayAsync();
+        return string.IsNullOrEmpty(g?.withdrawalDelay) ? BigInteger.Zero : BigInteger.Parse(g.withdrawalDelay);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         return await contract.GetFunction("gatewayWithdrawalDelay").CallAsync<BigInteger>();
+#endif
     }
 
     public async Task<bool> IsGatewayAuthorizedAsync(string addr)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var g = await ArcTrading.WebGL.WebGLChainApi.GetGamePaymentGatewayAsync(addr);
+        return g != null && g.authorized;
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         return await contract.GetFunction("isGatewayAuthorized").CallAsync<bool>(addr);
+#endif
     }
 
     public async Task<bool> IsGatewayTokenSupportedAsync()
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var g = await ArcTrading.WebGL.WebGLChainApi.GetGamePaymentGatewayAsync();
+        return g != null && g.tokenSupported;
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
         return await contract.GetFunction("isGatewayTokenSupported").CallAsync<bool>();
+#endif
     }
 
     // ----- GamePayment contract's Npc6551Manager admin -----
@@ -575,6 +719,12 @@ public class ArcTradingContractClient : MonoBehaviour
 
     public async Task<decimal> GetGatewayAvailableBalanceUSDCAsync(string address)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        if (string.IsNullOrWhiteSpace(address)) return 0m;
+        var balance = await ArcTrading.WebGL.WebGLChainApi.GetGatewayAvailableBalanceAsync(
+            Erc20UsdcHelper.ArcUsdcAddress, address);
+        return FromUsdc(balance);
+#else
         var arcNanopayment = GetComponent<ArcNanopaymentClient>();
         if (arcNanopayment == null) return 0m;
 
@@ -583,10 +733,27 @@ public class ArcTradingContractClient : MonoBehaviour
             Erc20UsdcHelper.ArcUsdcAddress,
             address);
         return FromUsdc(balance);
+#endif
     }
     
     public async Task<string> MintRandomAsync(BigInteger itemIdToBeMinted, bool nanopayment = false)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // WebGL: server's admin executor handles approval + mint atomically. The
+        // x402 variant routes funds via the server's Gateway depositor; the
+        // non-x402 variant pulls USDC from the server's spending wallet. In both
+        // cases the client never holds a private key.
+        if (nanopayment)
+        {
+            if (nftTokenId == 0)
+                throw new InvalidOperationException(
+                    $"{name}: nftTokenId is 0 — set it to the deployed NPC NFT tokenId before enabling nanopayment.");
+            var tbaWebgl = await EnsureTbaAddressAsync();
+            return await ArcTrading.WebGL.WebGLWalletApi.MintRandomX402Async(tbaWebgl);
+        }
+        var maxBuyPriceWebgl = await GetMaxBuyPriceAsync();
+        return await ArcTrading.WebGL.WebGLWalletApi.MintRandomAsync(maxBuyPriceWebgl);
+#else
         if (nanopayment)
         {
             if (npcPaymentWalletService == null)
@@ -599,7 +766,7 @@ public class ArcTradingContractClient : MonoBehaviour
             var arcNanopayment = GetComponent<ArcNanopaymentClient>();
             var capUsdc = (decimal)arcNanopayment.maxNanopaymentUsdc;
             var nanopaymentCap = Erc20UsdcHelper.ParseUsdc(capUsdc);
-            
+
             var effectiveAvailableUsdc = await GetGatewayAvailableBalanceUSDCAsync();
             if (effectiveAvailableUsdc < capUsdc)
                 await arcNanopayment.ApproveIfNeededThenGatewayDepositAsync((decimal)arcNanopayment.maxNanopaymentUsdc);
@@ -617,7 +784,7 @@ public class ArcTradingContractClient : MonoBehaviour
         }
 
         var web3 = await CreateSignedWeb3Async();
-        
+
         var maxBuyPrice = await GetMaxBuyPriceAsync();
         await Erc20UsdcHelper.EnsureApprovalAsync(web3, contractAddress, maxBuyPrice);
 
@@ -627,14 +794,20 @@ public class ArcTradingContractClient : MonoBehaviour
 
         return await fn.SendTransactionAsync(
             web3.TransactionManager.Account.Address, gas, null, maxBuyPrice);
+#endif
     }
     
     /// <summary>
     /// Sell one NFT held by the NPC's ERC-6551 TBA.
-    /// Signed by the paymentWallet.
+    /// Desktop: signed by the paymentWallet, routed through the TBA execute() call.
+    /// WebGL: the server's admin executor signs and routes everything; <paramref name="tbaAddress"/>
+    /// is decorative (server picks the holding TBA based on its own configured identity).
     /// </summary>
     public async Task<string> SellItemAsync(string tbaAddress, BigInteger itemId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLWalletApi.SellItemAsync(itemId);
+#else
         if (npcPaymentWalletService == null)
             throw new InvalidOperationException(
                 $"{name}: SellItemAsync needs NpcPaymentWalletService to resolve the operator key.");
@@ -662,6 +835,7 @@ public class ArcTradingContractClient : MonoBehaviour
         return await SendTbaExecuteAsync(
             operatorWeb3, tbaAddress, contractAddress, sellItemData,
             new HexBigInteger(400000), waitForReceipt: false);
+#endif
     }
 
     private async Task<Web3> CreateOperatorWeb3Async()
