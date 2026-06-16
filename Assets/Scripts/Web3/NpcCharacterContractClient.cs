@@ -183,7 +183,9 @@ public class NpcCharacterContractClient : MonoBehaviour
         ArcTrading.Crypto.EthRawTxSender.ConfigureChainId(id);
         return id;
 #else
-        var id = (long)(await readOnlyWeb3.Eth.ChainId.SendRequestAsync()).Value;
+        var id = await Web3RpcRetry.RunAsync(async () =>
+            (long)(await readOnlyWeb3.Eth.ChainId.SendRequestAsync()).Value,
+            label: "NpcCharacter.chainId");
         CachedChainId = id;
         return id;
 #endif
@@ -194,10 +196,13 @@ public class NpcCharacterContractClient : MonoBehaviour
 #if UNITY_WEBGL && !UNITY_EDITOR
         return await ArcTrading.WebGL.WebGLChainApi.GetPaymentBindingAsync(tokenId);
 #else
-        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
-        var fn = contract.GetFunction("getPaymentBinding");
-        var dto = await fn.CallDeserializingToObjectAsync<PaymentBindingDTO>(tokenId);
-        return (dto.Wallet, dto.Version);
+        return await Web3RpcRetry.RunAsync(async () =>
+        {
+            var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
+            var fn = contract.GetFunction("getPaymentBinding");
+            var dto = await fn.CallDeserializingToObjectAsync<PaymentBindingDTO>(tokenId);
+            return (dto.Wallet, dto.Version);
+        }, label: $"NpcCharacter.getPaymentBinding({tokenId})");
 #endif
     }
 
@@ -206,8 +211,11 @@ public class NpcCharacterContractClient : MonoBehaviour
 #if UNITY_WEBGL && !UNITY_EDITOR
         return await ArcTrading.WebGL.WebGLChainApi.NpcOwnerOfAsync(tokenId);
 #else
-        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
-        return await contract.GetFunction("ownerOf").CallAsync<string>(tokenId);
+        return await Web3RpcRetry.RunAsync(() =>
+        {
+            var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
+            return contract.GetFunction("ownerOf").CallAsync<string>(tokenId);
+        }, label: $"NpcCharacter.ownerOf({tokenId})");
 #endif
     }
 
@@ -216,8 +224,11 @@ public class NpcCharacterContractClient : MonoBehaviour
 #if UNITY_WEBGL && !UNITY_EDITOR
         return await ArcTrading.WebGL.WebGLChainApi.NpcExistsAsync(tokenId);
 #else
-        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
-        return await contract.GetFunction("exists").CallAsync<bool>(tokenId);
+        return await Web3RpcRetry.RunAsync(() =>
+        {
+            var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
+            return contract.GetFunction("exists").CallAsync<bool>(tokenId);
+        }, label: $"NpcCharacter.exists({tokenId})");
 #endif
     }
 
@@ -226,8 +237,11 @@ public class NpcCharacterContractClient : MonoBehaviour
 #if UNITY_WEBGL && !UNITY_EDITOR
         return await ArcTrading.WebGL.WebGLChainApi.NpcBalanceOfAsync(owner);
 #else
-        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
-        return await contract.GetFunction("balanceOf").CallAsync<BigInteger>(owner);
+        return await Web3RpcRetry.RunAsync(() =>
+        {
+            var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
+            return contract.GetFunction("balanceOf").CallAsync<BigInteger>(owner);
+        }, label: $"NpcCharacter.balanceOf({owner})");
 #endif
     }
 
@@ -236,17 +250,23 @@ public class NpcCharacterContractClient : MonoBehaviour
 #if UNITY_WEBGL && !UNITY_EDITOR
         return await ArcTrading.WebGL.WebGLChainApi.NpcNextTokenIdAsync();
 #else
-        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
-        return await contract.GetFunction("nextTokenId").CallAsync<BigInteger>();
+        return await Web3RpcRetry.RunAsync(() =>
+        {
+            var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
+            return contract.GetFunction("nextTokenId").CallAsync<BigInteger>();
+        }, label: "NpcCharacter.nextTokenId");
 #endif
     }
 
     public async Task<NpcDataDTO> GetNpcAsync(BigInteger tokenId)
     {
-        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
-        var fn = contract.GetFunction("getNpc");
-        var wrapped = await fn.CallDeserializingToObjectAsync<GetNpcOutputDTO>(tokenId);
-        return wrapped?.Data;
+        return await Web3RpcRetry.RunAsync(async () =>
+        {
+            var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
+            var fn = contract.GetFunction("getNpc");
+            var wrapped = await fn.CallDeserializingToObjectAsync<GetNpcOutputDTO>(tokenId);
+            return wrapped?.Data;
+        }, label: $"NpcCharacter.getNpc({tokenId})");
     }
     
     public async Task<List<OwnedNpc>> EnumerateOwnedNpcsAsync(
@@ -273,8 +293,14 @@ public class NpcCharacterContractClient : MonoBehaviour
             string holder;
             try
             {
-                holder = await ownerOfFn.CallAsync<string>(id);
+                // Web3RpcRetry passes through reverts (RpcResponseException) immediately;
+                // burned / nonexistent tokens land in the catch below on the first try.
+                holder = await Web3RpcRetry.RunAsync(
+                    () => ownerOfFn.CallAsync<string>(id),
+                    label: $"NpcCharacter.ownerOf({id})",
+                    ct: ct);
             }
+            catch (OperationCanceledException) { throw; }
             catch
             {
                 // Burned / nonexistent tokenId reverts; skip.
@@ -286,9 +312,13 @@ public class NpcCharacterContractClient : MonoBehaviour
             NpcDataDTO data;
             try
             {
-                var wrapped = await getNpcFn.CallDeserializingToObjectAsync<GetNpcOutputDTO>(id);
+                var wrapped = await Web3RpcRetry.RunAsync(
+                    () => getNpcFn.CallDeserializingToObjectAsync<GetNpcOutputDTO>(id),
+                    label: $"NpcCharacter.getNpc({id})",
+                    ct: ct);
                 data = wrapped?.Data;
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 Debug.LogWarning($"[NpcCharacterContractClient] getNpc({id}) failed: {ex.Message}");
