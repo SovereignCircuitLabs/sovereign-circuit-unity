@@ -72,8 +72,12 @@ public static class Web3RpcRetry
     // worst-case total wait is ~250 + 1000 + 1500 = 2.75s before giving up.
     private static int BackoffMs(int attempt) => Math.Min(1500, 250 * attempt * attempt);
 
+    // Routed through the WebGL-safe coroutine delay so the rare case where this
+    // helper does get called from a WebGL build (e.g. shared helper paths) does
+    // not strand on a non-firing await continuation. Desktop / Editor still
+    // hits Task.Delay underneath.
     private static Task DelayAsync(int ms, CancellationToken ct)
-        => ct.CanBeCanceled ? Task.Delay(ms, ct) : Task.Delay(ms);
+        => ArcTrading.Crypto.WebGLAsyncBridge.DelayMsAsync(ms, ct);
 
     private static bool IsTransient(Exception ex)
     {

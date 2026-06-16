@@ -260,6 +260,10 @@ public class NpcCharacterContractClient : MonoBehaviour
 
     public async Task<NpcDataDTO> GetNpcAsync(BigInteger tokenId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var npc = await ArcTrading.WebGL.WebGLChainApi.GetNpcAsync(tokenId);
+        return ConvertNpcData(npc);
+#else
         return await Web3RpcRetry.RunAsync(async () =>
         {
             var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
@@ -267,8 +271,44 @@ public class NpcCharacterContractClient : MonoBehaviour
             var wrapped = await fn.CallDeserializingToObjectAsync<GetNpcOutputDTO>(tokenId);
             return wrapped?.Data;
         }, label: $"NpcCharacter.getNpc({tokenId})");
+#endif
     }
-    
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    private static NpcDataDTO ConvertNpcData(ArcTrading.WebGL.WebGLChainApi.NpcData src)
+    {
+        if (src == null) return null;
+        var dto = new NpcDataDTO
+        {
+            NpcName = src.npcName,
+            MetadataURI = src.metadataURI,
+            Archetype = src.archetype,
+            RiskLevel = src.riskLevel,
+            Level = src.level,
+            Reputation = src.reputation,
+        };
+        if (src.portfolio != null)
+        {
+            dto.Portfolio = new PortfolioConfigDTO
+            {
+                LivingNeedsWeightBps = src.portfolio.livingNeedsWeightBps,
+                ReserveWeightBps = src.portfolio.reserveWeightBps,
+                TradingWeightBps = src.portfolio.tradingWeightBps,
+                MinimumLivingBudgetUSDC = ParseUlong(src.portfolio.minimumLivingBudgetUSDC),
+                MinimumReserveBudgetUSDC = ParseUlong(src.portfolio.minimumReserveBudgetUSDC),
+                RebalanceIntervalSeconds = src.portfolio.rebalanceIntervalSeconds,
+                ChainActionCooldownSeconds = src.portfolio.chainActionCooldownSeconds,
+                MinTradeUSDC = ParseUlong(src.portfolio.minTradeUSDC),
+                MaxTradeUSDC = ParseUlong(src.portfolio.maxTradeUSDC),
+            };
+        }
+        return dto;
+    }
+
+    private static ulong ParseUlong(string s)
+        => string.IsNullOrEmpty(s) ? 0UL : ulong.Parse(s);
+#endif
+
     public async Task<List<OwnedNpc>> EnumerateOwnedNpcsAsync(
         string owner, CancellationToken ct = default)
     {
@@ -282,28 +322,20 @@ public class NpcCharacterContractClient : MonoBehaviour
         var balance = await BalanceOfAsync(owner);
         if (balance == BigInteger.Zero) return result;
 
-        var contract = readOnlyWeb3.Eth.GetContract(Abi, nftContractAddress);
-        
-        var ownerOfFn = contract.GetFunction("ownerOf");
-        var getNpcFn  = contract.GetFunction("getNpc");
-
         for (BigInteger id = BigInteger.One; id < next; id += BigInteger.One)
         {
             ct.ThrowIfCancellationRequested();
             string holder;
             try
             {
-                // Web3RpcRetry passes through reverts (RpcResponseException) immediately;
-                // burned / nonexistent tokens land in the catch below on the first try.
-                holder = await Web3RpcRetry.RunAsync(
-                    () => ownerOfFn.CallAsync<string>(id),
-                    label: $"NpcCharacter.ownerOf({id})",
-                    ct: ct);
+                // OwnerOfAsync internally branches: Nethereum on Desktop/Editor,
+                // /npc-character/:tokenId/owner on WebGL. Burned/nonexistent
+                // tokens revert (Desktop) or 5xx (WebGL) — caught below.
+                holder = await OwnerOfAsync(id);
             }
             catch (OperationCanceledException) { throw; }
             catch
             {
-                // Burned / nonexistent tokenId reverts; skip.
                 continue;
             }
 
@@ -312,11 +344,7 @@ public class NpcCharacterContractClient : MonoBehaviour
             NpcDataDTO data;
             try
             {
-                var wrapped = await Web3RpcRetry.RunAsync(
-                    () => getNpcFn.CallDeserializingToObjectAsync<GetNpcOutputDTO>(id),
-                    label: $"NpcCharacter.getNpc({id})",
-                    ct: ct);
-                data = wrapped?.Data;
+                data = await GetNpcAsync(id);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
@@ -475,29 +503,50 @@ public class NpcCharacterContractClient : MonoBehaviour
         string to, BigInteger value, byte[] data, HexBigInteger gas,
         bool waitReceipt, string label)
     {
+        Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): entering, awaiting chainId");
         var chainId = await GetChainIdAsync();
+        Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): chainId={chainId}, awaiting ownerTxGate");
         await ownerTxGate.WaitAsync();
+        Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): ownerTxGate acquired");
         try
         {
             string txHash;
             if (loginViaAuth)
             {
+                Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): SendViaBridgeAsync start");
                 txHash = await SendViaBridgeAsync(chainId, to, value, data, gas, label);
+                Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): SendViaBridgeAsync returned tx={txHash}");
             }
             else
             {
                 txHash = await SendViaLocalKeyAsync(chainId, to, value, data, gas);
             }
 #if UNITY_WEBGL && !UNITY_EDITOR
+            // Nethereum's RpcClient → Newtonsoft path trips IL2CPP stripping on
+            // RpcParametersJsonConverter under WebGL, so we route the receipt
+            // poll through the server's plain-JSON GET /tx/receipt/:hash. The
+            // local-key path (EthRawTxSender → /tx/send-raw) already had viem
+            // waitForTransactionReceipt on the server, so this loop typically
+            // resolves on the first iteration; the bridge path (MetaMask
+            // eth_sendTransaction) returns immediately on broadcast, so the
+            // poll is what actually waits for confirmation there. Without this,
+            // post-bind verifiers (e.g. NpcPaymentWalletService) read 0x0,
+            // think the bind failed, and re-bind — abandoning the previous
+            // operator wallet and any funds on it.
             if (waitReceipt)
-                Debug.LogWarning($"[NpcCharacterContractClient] {label} submitted (tx={txHash}); receipt polling is skipped in WebGL — caller should not assume the tx has confirmed.");
+            {
+                await WaitReceiptWebGLAsync(txHash, label);
+                Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): WaitReceiptWebGLAsync returned");
+            }
 #else
             if (waitReceipt) await WaitReceiptAsync(readOnlyWeb3, txHash);
 #endif
+            Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): returning txHash");
             return txHash;
         }
         finally
         {
+            Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): finally — releasing ownerTxGate");
             ownerTxGate.Release();
         }
     }
@@ -584,9 +633,76 @@ public class NpcCharacterContractClient : MonoBehaviour
                     throw new InvalidOperationException($"tx {txHash} reverted");
                 return;
             }
-            await Task.Delay(800);
+            await ArcTrading.Crypto.WebGLAsyncBridge.DelayMsAsync(800);
         }
     }
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    private static async Task WaitReceiptWebGLAsync(string txHash, string label)
+    {
+        const int pollIntervalMs = 800;
+        // Hard cap so a permanently-dropped tx doesn't wedge a UI flow forever.
+        // 5 minutes is well past any realistic confirmation latency on Arc testnet.
+        const int maxAttempts = 5 * 60 * 1000 / pollIntervalMs;
+        // Surface progress every ~8s so callers can see the poll is alive and the
+        // tx hash they need to inspect on a block explorer.
+        const int logEveryAttempts = 10;
+
+        // Tolerate a short burst of Unknown right after broadcast — the node may
+        // not have indexed the tx yet. Beyond that, Unknown means the node has
+        // never heard of this hash (most likely dropped/replaced), and polling
+        // longer is just wasting time. Pending (tx in mempool) still gets the
+        // full maxAttempts budget.
+        const int unknownGraceAttempts = 8; // ~6.4s
+
+        Debug.Log($"[NpcCharacterContractClient] {label} broadcast (tx={txHash}); waiting for receipt…");
+        int consecutiveUnknown = 0;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            ArcTrading.WebGL.WebGLChainApi.TxReceiptStatus status;
+            try
+            {
+                (status, _) = await ArcTrading.WebGL.WebGLChainApi
+                    .GetTxReceiptAsync(txHash).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[NpcCharacterContractClient] {label} receipt poll attempt {attempt} threw: {ex.Message} — retrying.");
+                await ArcTrading.Crypto.WebGLAsyncBridge.DelayMsAsync(pollIntervalMs);
+                continue;
+            }
+
+            if (status == ArcTrading.WebGL.WebGLChainApi.TxReceiptStatus.Success)
+            {
+                Debug.Log($"[NpcCharacterContractClient] {label} confirmed (tx={txHash}) after {attempt} poll(s).");
+                return;
+            }
+            if (status == ArcTrading.WebGL.WebGLChainApi.TxReceiptStatus.Reverted)
+                throw new InvalidOperationException($"{label} reverted (tx={txHash})");
+
+            if (status == ArcTrading.WebGL.WebGLChainApi.TxReceiptStatus.Unknown)
+            {
+                consecutiveUnknown++;
+                if (consecutiveUnknown >= unknownGraceAttempts)
+                    throw new InvalidOperationException(
+                        $"{label}: node has no record of tx {txHash} after {consecutiveUnknown * pollIntervalMs / 1000}s. " +
+                        "It was likely dropped from the mempool or replaced. Check the wallet's tx history.");
+            }
+            else
+            {
+                consecutiveUnknown = 0;
+            }
+
+            if (attempt % logEveryAttempts == 0)
+                Debug.Log($"[NpcCharacterContractClient] {label} still {status} after {attempt * pollIntervalMs / 1000}s (tx={txHash}).");
+
+            await ArcTrading.Crypto.WebGLAsyncBridge.DelayMsAsync(pollIntervalMs);
+        }
+        throw new InvalidOperationException(
+            $"{label} receipt did not arrive within {maxAttempts * pollIntervalMs / 1000}s (tx={txHash}). " +
+            "Check the block explorer — the tx may have been dropped or replaced.");
+    }
+#endif
 
     private static string Shorten(string addr)
     {

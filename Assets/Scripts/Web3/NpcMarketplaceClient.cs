@@ -111,9 +111,20 @@ public class NpcMarketplaceClient : MonoBehaviour
 
     public async Task<MarketplaceListingOutputDTO> GetListingAsync(BigInteger tokenId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var listing = await ArcTrading.WebGL.WebGLChainApi.GetMarketplaceListingAsync(tokenId);
+        if (listing == null) return null;
+        return new MarketplaceListingOutputDTO
+        {
+            Seller = listing.seller,
+            MinPrice = string.IsNullOrEmpty(listing.minPrice) ? BigInteger.Zero : BigInteger.Parse(listing.minPrice),
+            Active = listing.active,
+        };
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, marketplaceContractAddress);
         return await contract.GetFunction("getListing")
             .CallDeserializingToObjectAsync<MarketplaceListingOutputDTO>(tokenId);
+#endif
     }
 
     /// <summary>
@@ -265,14 +276,25 @@ public class NpcMarketplaceClient : MonoBehaviour
 
     private async Task<BigInteger> GetUsdcAllowanceAsync(string owner)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.GetUsdcAllowanceAsync(owner, marketplaceContractAddress);
+#else
         var usdc = readOnlyWeb3.Eth.GetContract(Erc20Abi, usdcAddress);
         return await usdc.GetFunction("allowance")
             .CallAsync<BigInteger>(owner, marketplaceContractAddress);
+#endif
     }
 
     public async Task<bool> IsMarketplaceNftApprovedAsync(string owner, BigInteger tokenId)
     {
         if (npcCharacter == null) return false;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var allApproved = await ArcTrading.WebGL.WebGLChainApi.NpcIsApprovedForAllAsync(owner, marketplaceContractAddress);
+        if (allApproved) return true;
+        var single = await ArcTrading.WebGL.WebGLChainApi.NpcGetApprovedAsync(tokenId);
+        return !string.IsNullOrWhiteSpace(single)
+               && string.Equals(single, marketplaceContractAddress, StringComparison.OrdinalIgnoreCase);
+#else
         var nft = readOnlyWeb3.Eth.GetContract(Erc721Abi, npcCharacter.NftContractAddress);
         var allApproved = await nft.GetFunction("isApprovedForAll")
             .CallAsync<bool>(owner, marketplaceContractAddress);
@@ -281,6 +303,7 @@ public class NpcMarketplaceClient : MonoBehaviour
         var single = await nft.GetFunction("getApproved").CallAsync<string>(tokenId);
         return !string.IsNullOrWhiteSpace(single)
                && string.Equals(single, marketplaceContractAddress, StringComparison.OrdinalIgnoreCase);
+#endif
     }
 
     // ---------------- Write (player wallet, via bridge) ----------------
@@ -383,16 +406,31 @@ public class NpcMarketplaceClient : MonoBehaviour
             throw new InvalidOperationException(
                 "[NpcMarketplaceClient] npcCharacter ref is missing — cannot approve NFT.");
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var approved = await ArcTrading.WebGL.WebGLChainApi.NpcIsApprovedForAllAsync(owner, marketplaceContractAddress);
+        if (approved) return;
+#else
         var nft = readOnlyWeb3.Eth.GetContract(Erc721Abi, npcCharacter.NftContractAddress);
         var approved = await nft.GetFunction("isApprovedForAll")
             .CallAsync<bool>(owner, marketplaceContractAddress);
         if (approved) return;
+#endif
 
         Debug.Log($"[NpcMarketplaceClient] NPC NFT not approved for marketplace, calling setApprovalForAll…");
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // Encoding the setApprovalForAll calldata still needs Nethereum's ABI encoder, which is
+        // pure CPU work (no RPC) and works fine under il2cpp/WebGL. The wallet bridge then signs
+        // and broadcasts via the player's MetaMask, so no readOnlyWeb3 round-trip is involved.
+        var encoder = new Web3().Eth.GetContract(Erc721Abi, npcCharacter.NftContractAddress);
+        var data = encoder.GetFunction("setApprovalForAll")
+            .GetData(marketplaceContractAddress, true)
+            .HexToByteArray();
+#else
         var data = nft.GetFunction("setApprovalForAll")
             .GetData(marketplaceContractAddress, true)
             .HexToByteArray();
+#endif
 
         var txHash = await SendBridgeTxAsync(
             owner, npcCharacter.NftContractAddress, BigInteger.Zero, data, approveNftGas, chainId,
@@ -411,9 +449,14 @@ public class NpcMarketplaceClient : MonoBehaviour
         if (!login.HasSession || login.Current == null || string.IsNullOrWhiteSpace(login.Current.wallet))
             throw new InvalidOperationException(
                 "[NpcMarketplaceClient] No active wallet session — sign in first.");
+#if !UNITY_WEBGL || UNITY_EDITOR
+        // Desktop only: tx signing routes through the local HttpListener bridge,
+        // so the browser tab must still be open and authenticated. WebGL signs
+        // via window.ethereum in the same tab — no bridge server exists.
         if (!login.BridgeReady)
             throw new InvalidOperationException(
                 "[NpcMarketplaceClient] Bridge not ready — reopen the login tab in the browser.");
+#endif
         return login.Current;
     }
 
@@ -435,6 +478,21 @@ public class NpcMarketplaceClient : MonoBehaviour
 
     private async Task WaitReceiptAsync(string txHash)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // Nethereum's RpcClient → Newtonsoft.Json path trips IL2CPP stripping on
+        // RpcParametersJsonConverter under WebGL, so eth_getTransactionReceipt
+        // throws before deserialization. Route through the server's plain-JSON
+        // GET /tx/receipt/:hash instead.
+        while (true)
+        {
+            var (status, _) = await ArcTrading.WebGL.WebGLChainApi
+                .GetTxReceiptAsync(txHash).ConfigureAwait(true);
+            if (status == ArcTrading.WebGL.WebGLChainApi.TxReceiptStatus.Success) return;
+            if (status == ArcTrading.WebGL.WebGLChainApi.TxReceiptStatus.Reverted)
+                throw new InvalidOperationException($"tx {txHash} reverted");
+            await ArcTrading.Crypto.WebGLAsyncBridge.DelayMsAsync(800);
+        }
+#else
         while (true)
         {
             var receipt = await readOnlyWeb3.Eth.Transactions.GetTransactionReceipt
@@ -445,7 +503,8 @@ public class NpcMarketplaceClient : MonoBehaviour
                     throw new InvalidOperationException($"tx {txHash} reverted");
                 return;
             }
-            await Task.Delay(800);
+            await ArcTrading.Crypto.WebGLAsyncBridge.DelayMsAsync(800);
         }
+#endif
     }
 }

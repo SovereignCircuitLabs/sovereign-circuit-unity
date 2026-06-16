@@ -51,6 +51,9 @@ public abstract class TradingNpcActor : AIActor
     private string currentMoveTargetName;
     private NpcPortfolioConfig basePortfolioConfig;
     private WorldEventManager subscribedWorldEventManager;
+#if UNITY_WEBGL && !UNITY_EDITOR
+    private static bool webglPortfolioInitBusy;
+#endif
 
     // Set by OwnedNpcSpawner before activation. Overrides ConfigurePortfolio()'s
     // archetype defaults so on-chain NpcCharacter.portfolio wins.
@@ -490,7 +493,7 @@ public abstract class TradingNpcActor : AIActor
                 initState = NpcInitState.Retrying;
                 currentActivity = $"Init failed, retry in {backoff:0}s — {Truncate(ex.Message)}";
 
-                try { await Task.Delay(TimeSpan.FromSeconds(backoff), ct); }
+                try { await ArcTrading.Crypto.WebGLAsyncBridge.DelayAsync(TimeSpan.FromSeconds(backoff), ct); }
                 catch (OperationCanceledException) { return; }
             }
         }
@@ -500,6 +503,47 @@ public abstract class TradingNpcActor : AIActor
     }
 
     private async Task InitializePortfolioAsync(CancellationToken ct)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        Debug.Log($"{LogPrefix} waiting for WebGL portfolio init gate.");
+        await AcquireWebglPortfolioInitGateAsync(LogPrefix, ct);
+        try
+        {
+            Debug.Log($"{LogPrefix} acquired WebGL portfolio init gate.");
+            await InitializePortfolioCoreAsync(ct);
+        }
+        finally
+        {
+            Debug.Log($"{LogPrefix} releasing WebGL portfolio init gate.");
+            webglPortfolioInitBusy = false;
+            Debug.Log($"{LogPrefix} released WebGL portfolio init gate.");
+        }
+#else
+        await InitializePortfolioCoreAsync(ct);
+#endif
+    }
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    private static async Task AcquireWebglPortfolioInitGateAsync(string logPrefix, CancellationToken ct)
+    {
+        int polls = 0;
+        while (webglPortfolioInitBusy)
+        {
+            ct.ThrowIfCancellationRequested();
+            polls++;
+            if (polls == 1 || polls % 50 == 0)
+            {
+                Debug.Log($"{logPrefix} still waiting for WebGL portfolio init gate ({polls} poll(s)).");
+            }
+
+            await ArcTrading.Crypto.WebGLAsyncBridge.DelayAsync(TimeSpan.FromMilliseconds(100), ct);
+        }
+
+        webglPortfolioInitBusy = true;
+    }
+#endif
+
+    private async Task InitializePortfolioCoreAsync(CancellationToken ct)
     {
         await WithTimeoutAsync(
             contractClient.InitializeWalletAsync(),
@@ -569,7 +613,7 @@ public abstract class TradingNpcActor : AIActor
     {
         while (!ct.IsCancellationRequested && initState == NpcInitState.Failed)
         {
-            try { await Task.Delay(TimeSpan.FromSeconds(fallbackBackgroundRetryIntervalSeconds), ct); }
+            try { await ArcTrading.Crypto.WebGLAsyncBridge.DelayAsync(TimeSpan.FromSeconds(fallbackBackgroundRetryIntervalSeconds), ct); }
             catch (OperationCanceledException) { return; }
             if (this == null || ct.IsCancellationRequested) return;
 
@@ -608,24 +652,37 @@ public abstract class TradingNpcActor : AIActor
 
     private static async Task WithTimeoutAsync(Task task, float seconds, string label, CancellationToken ct)
     {
-        var delay = Task.Delay(TimeSpan.FromSeconds(seconds), ct);
+        var delay = ArcTrading.Crypto.WebGLAsyncBridge.DelayAsync(TimeSpan.FromSeconds(seconds), ct);
         var winner = await Task.WhenAny(task, delay);
         if (winner != task)
         {
             ct.ThrowIfCancellationRequested();
+#if UNITY_WEBGL && !UNITY_EDITOR
+            Debug.LogWarning(
+                $"{label} is still pending after {seconds:0}s; continuing to await the WebGL wallet/chain task.");
+            await task;
+            return;
+#else
             throw new TimeoutException($"{label} timed out after {seconds:0}s");
+#endif
         }
         await task;
     }
 
     private static async Task<T> WithTimeoutAsync<T>(Task<T> task, float seconds, string label, CancellationToken ct)
     {
-        var delay = Task.Delay(TimeSpan.FromSeconds(seconds), ct);
+        var delay = ArcTrading.Crypto.WebGLAsyncBridge.DelayAsync(TimeSpan.FromSeconds(seconds), ct);
         var winner = await Task.WhenAny(task, delay);
         if (winner != task)
         {
             ct.ThrowIfCancellationRequested();
+#if UNITY_WEBGL && !UNITY_EDITOR
+            Debug.LogWarning(
+                $"{label} is still pending after {seconds:0}s; continuing to await the WebGL wallet/chain task.");
+            return await task;
+#else
             throw new TimeoutException($"{label} timed out after {seconds:0}s");
+#endif
         }
         return await task;
     }

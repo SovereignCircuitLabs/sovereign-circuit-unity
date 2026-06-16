@@ -1048,7 +1048,7 @@ public class ArcTradingContractClient : MonoBehaviour
                     throw new InvalidOperationException($"tx {txHash} reverted");
                 return;
             }
-            await Task.Delay(800);
+            await ArcTrading.Crypto.WebGLAsyncBridge.DelayMsAsync(800);
         }
     }
 
@@ -1108,8 +1108,17 @@ public class ArcTradingContractClient : MonoBehaviour
             throw new InvalidOperationException(
                 $"{name}: cannot top up trader wallet — npcPaymentWalletService / NpcContract not wired.");
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // CreateSignedWeb3Async pulls chainId via Nethereum's eth_chainId, which
+        // crashes WebGL (IL2CPP strips RpcParametersJsonConverter). We only need
+        // the trader address here, so derive it from the locally-held PK via the
+        // crypto backend instead.
+        var traderSigner = await GetTraderSignerAsync();
+        var traderAddr = traderSigner.address;
+#else
         var web3 = await CreateSignedWeb3Async();
         var traderAddr = web3.TransactionManager.Account.Address;
+#endif
         var deficit = target - currentNpcBalance;
         var deficitUnits = Erc20UsdcHelper.ParseUsdc(deficit);
 

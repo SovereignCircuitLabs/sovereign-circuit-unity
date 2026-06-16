@@ -68,40 +68,90 @@ public class NpcNFTPricingClient : MonoBehaviour
 
     public async Task<BigInteger> GetNpcClassIdAsync(BigInteger tokenId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.GetNpcClassIdAsync(tokenId);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, pricingContractAddress);
         return await contract.GetFunction("getNpcClassId").CallAsync<BigInteger>(tokenId);
+#endif
     }
 
     public async Task<BigInteger> GetNpcTbaTotalValueAsync(BigInteger tokenId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.GetNpcTbaTotalValueAsync(tokenId);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, pricingContractAddress);
         return await contract.GetFunction("getNpcTbaTotalValue").CallAsync<BigInteger>(tokenId);
+#endif
     }
 
     public async Task<NpcTbaValueBreakdownOutputDTO> GetNpcTbaValueBreakdownAsync(BigInteger tokenId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var dto = await ArcTrading.WebGL.WebGLChainApi.GetNpcTbaValueBreakdownAsync(tokenId);
+        if (dto == null) return null;
+        return new NpcTbaValueBreakdownOutputDTO
+        {
+            Tba = dto.tba,
+            ItemValue = string.IsNullOrEmpty(dto.itemValue) ? BigInteger.Zero : BigInteger.Parse(dto.itemValue),
+            CashValue = string.IsNullOrEmpty(dto.cashValue) ? BigInteger.Zero : BigInteger.Parse(dto.cashValue),
+            TbaTotalValue = string.IsNullOrEmpty(dto.tbaTotalValue) ? BigInteger.Zero : BigInteger.Parse(dto.tbaTotalValue),
+        };
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, pricingContractAddress);
         return await contract.GetFunction("getNpcTbaValueBreakdown")
             .CallDeserializingToObjectAsync<NpcTbaValueBreakdownOutputDTO>(tokenId);
+#endif
     }
 
     public async Task<BigInteger> GetScarcityMultiplierBpsAsync(BigInteger classId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        return await ArcTrading.WebGL.WebGLChainApi.GetScarcityMultiplierBpsAsync(classId);
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, pricingContractAddress);
         return await contract.GetFunction("getScarcityMultiplierBps").CallAsync<BigInteger>(classId);
+#endif
     }
 
     public async Task<NpcClassMarketOutputDTO> GetClassMarketAsync(BigInteger classId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var m = await ArcTrading.WebGL.WebGLChainApi.GetClassMarketAsync(classId);
+        if (m == null) return null;
+        return new NpcClassMarketOutputDTO
+        {
+            TotalSupply = string.IsNullOrEmpty(m.totalSupply) ? BigInteger.Zero : BigInteger.Parse(m.totalSupply),
+            ListedSupply = string.IsNullOrEmpty(m.listedSupply) ? BigInteger.Zero : BigInteger.Parse(m.listedSupply),
+            VirtualLiquidity = string.IsNullOrEmpty(m.virtualLiquidity) ? BigInteger.Zero : BigInteger.Parse(m.virtualLiquidity),
+            BasePrice = string.IsNullOrEmpty(m.basePrice) ? BigInteger.Zero : BigInteger.Parse(m.basePrice),
+            MaxMultiplierBps = string.IsNullOrEmpty(m.maxMultiplierBps) ? BigInteger.Zero : BigInteger.Parse(m.maxMultiplierBps),
+            ScarcityWeightBps = string.IsNullOrEmpty(m.scarcityWeightBps) ? BigInteger.Zero : BigInteger.Parse(m.scarcityWeightBps),
+            Exists = m.exists,
+        };
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, pricingContractAddress);
         return await contract.GetFunction("classMarkets")
             .CallDeserializingToObjectAsync<NpcClassMarketOutputDTO>(classId);
+#endif
     }
 
     public async Task<QuoteNpcPriceOutputDTO> QuoteNpcPriceAsync(BigInteger tokenId)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var dto = await ArcTrading.WebGL.WebGLChainApi.QuoteNpcPriceAsync(tokenId);
+        if (dto == null) return null;
+        return new QuoteNpcPriceOutputDTO
+        {
+            Price = string.IsNullOrEmpty(dto.price) ? BigInteger.Zero : BigInteger.Parse(dto.price),
+            TbaTotalValue = string.IsNullOrEmpty(dto.tbaTotalValue) ? BigInteger.Zero : BigInteger.Parse(dto.tbaTotalValue),
+            ScarcityMultiplierBps = string.IsNullOrEmpty(dto.scarcityMultiplierBps) ? BigInteger.Zero : BigInteger.Parse(dto.scarcityMultiplierBps),
+        };
+#else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, pricingContractAddress);
         return await contract.GetFunction("quoteNpcPrice")
             .CallDeserializingToObjectAsync<QuoteNpcPriceOutputDTO>(tokenId);
+#endif
     }
 }

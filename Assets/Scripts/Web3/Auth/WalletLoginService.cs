@@ -57,25 +57,31 @@ namespace ArcTrading.Auth
 
         protected async void Start()
         {
+            Debug.Log("[WalletLoginService] Start: entered");
             try
             {
                 if (npcContract == null)
                 {
                     npcContract = FindObjectOfType<NpcCharacterContractClient>();
+                    Debug.Log($"[WalletLoginService] Start: npcContract resolved = {(npcContract != null ? npcContract.name : "<null>")}");
                 }
 
                 if (!chainIdConfigured)
                 {
+                    Debug.Log("[WalletLoginService] Start: awaiting npcContract.GetChainIdAsync()");
                     var chainId = await npcContract.GetChainIdAsync();
+                    Debug.Log($"[WalletLoginService] Start: chainId = {chainId}");
                     ConfigureChainId(chainId);
                 }
 
+                Debug.Log("[WalletLoginService] Start: awaiting EnsureLoggedInAsync");
                 await EnsureLoggedInAsync(
                     "Sign in to ArcTrading",
                     7777,
                     TimeSpan.FromMinutes(1440),
                     CancellationToken.None,
                     persistentBridge: true).ConfigureAwait(true);
+                Debug.Log("[WalletLoginService] Start: EnsureLoggedInAsync returned");
             }
             catch (OperationCanceledException)
             {
@@ -115,7 +121,8 @@ namespace ArcTrading.Auth
             // window.ethereum.request({method: "personal_sign"}) via the jslib
             // bridge. persistentBridge has no meaning here — every send-tx call
             // pops MetaMask just like the Desktop bridge mode does.
-            if (HasSession) return Current;
+            Debug.Log("[WalletLoginService] EnsureLoggedInAsync(WebGL): entered");
+            if (HasSession) { Debug.Log("[WalletLoginService] EnsureLoggedInAsync(WebGL): already has session"); return Current; }
 
             // Restored session reuse still applies (same WalletSession schema).
             var restoredWebgl = WalletSession.LoadOrNull();
@@ -127,11 +134,13 @@ namespace ArcTrading.Auth
                 return restoredWebgl;
             }
 
-            if (inflight != null) return await inflight.Task.ConfigureAwait(true);
+            if (inflight != null) { Debug.Log("[WalletLoginService] EnsureLoggedInAsync(WebGL): joining inflight"); return await inflight.Task.ConfigureAwait(true); }
             inflight = new TaskCompletionSource<WalletSession>(TaskCreationOptions.RunContinuationsAsynchronously);
             try
             {
+                Debug.Log("[WalletLoginService] EnsureLoggedInAsync(WebGL): calling MetaMask eth_requestAccounts (popup expected)");
                 var wallet = await WebGLMetamaskBridge.RequestAccountsAsync(ct).ConfigureAwait(true);
+                Debug.Log($"[WalletLoginService] EnsureLoggedInAsync(WebGL): RequestAccounts returned wallet = {wallet}");
                 if (string.IsNullOrEmpty(wallet))
                     throw new InvalidOperationException("MetaMask returned no wallet");
 
@@ -141,6 +150,7 @@ namespace ArcTrading.Auth
                 long chainIdLocal = chainIdConfigured
                     ? cachedChainId
                     : await WebGLMetamaskBridge.ChainIdAsync(ct).ConfigureAwait(true);
+                Debug.Log($"[WalletLoginService] EnsureLoggedInAsync(WebGL): chainId = {chainIdLocal}");
                 ConfigureChainId(chainIdLocal);
 
                 var origin = Application.absoluteURL ?? string.Empty;
@@ -170,7 +180,9 @@ namespace ArcTrading.Auth
                     ExpirationTime = now + sessionTtl,
                 });
 
+                Debug.Log("[WalletLoginService] EnsureLoggedInAsync(WebGL): calling MetaMask personal_sign (popup expected)");
                 var signature = await WebGLMetamaskBridge.PersonalSignAsync(siwe, wallet, ct).ConfigureAwait(true);
+                Debug.Log($"[WalletLoginService] EnsureLoggedInAsync(WebGL): personal_sign returned ({signature?.Length ?? 0} chars)");
 
                 var session = new WalletSession
                 {

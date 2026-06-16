@@ -13,7 +13,9 @@ namespace ArcTrading.WebGL
     /// </summary>
     public static class ArcTradingWebGLConfig
     {
-        public static string ApiBaseUrl { get; private set; } = "http://localhost:4021";
+        // Server mounts contractRoutes under /api (see server.ts: app.use('/api', contractRoutes)),
+        // so the base URL has to include the prefix or every request 404s.
+        public static string ApiBaseUrl { get; private set; } = "http://localhost:4021/api";
 
         // Reserved for Phase 2-4 write routes (server enforces Bearer auth via ADMIN_TOKEN).
         public static string AdminToken { get; private set; } =

@@ -92,10 +92,12 @@ namespace ArcTrading.WebGL
         private static bool ShouldRetry(ApiException ex)
             => ex.StatusCode == 0 || ex.StatusCode >= 500;
 
-        // Task.Delay works in WebGL (it runs on the player loop), but cancellation
-        // support is what matters here - keep it cancellable end-to-end.
+        // Task.Delay strands the await continuation in some WebGL builds (the
+        // SynchronizationContext / player-loop integration has an edge case
+        // that leaves the retry loop wedged forever). Delegate to the shared
+        // coroutine-backed delay, which falls back to Task.Delay off-WebGL.
         private static Task DelayAsync(int ms, CancellationToken ct)
-            => ct.CanBeCanceled ? Task.Delay(ms, ct) : Task.Delay(ms);
+            => ArcTrading.Crypto.WebGLAsyncBridge.DelayMsAsync(ms, ct);
 
         private static Task<string> SendOnceAsync(string method, string url, string body, CancellationToken ct)
         {

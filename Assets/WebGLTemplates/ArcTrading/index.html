@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <title>{{{ PRODUCT_NAME }}}</title>
+  <link rel="shortcut icon" href="TemplateData/favicon.ico" />
+  <style>
+    body { margin: 0; padding: 0; background: #111; color: #eee;
+           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+    #unity-container { position: absolute; inset: 0; }
+    #unity-canvas { width: 100%; height: 100%; background: #000; display: block; }
+    #unity-loading-bar { position: absolute; left: 50%; top: 50%;
+                        transform: translate(-50%, -50%); text-align: center; }
+    #unity-progress-bar-empty { width: 320px; height: 6px; background: #222;
+                                border-radius: 3px; overflow: hidden; }
+    #unity-progress-bar-full { width: 0%; height: 100%; background: #66b2ff;
+                               transition: width .15s linear; }
+    #boot-status { margin-top: 12px; font-size: 13px; color: #8b91a8; min-height: 18px; }
+    #boot-status.err { color: #ff7a7a; }
+  </style>
+</head>
+<body>
+  <div id="unity-container">
+    <canvas id="unity-canvas" tabindex="-1"></canvas>
+    <div id="unity-loading-bar">
+      <div id="unity-progress-bar-empty">
+        <div id="unity-progress-bar-full"></div>
+      </div>
+      <div id="boot-status">Loading crypto bridge…</div>
+    </div>
+  </div>
+
+  <!--
+    Custom bootstrap: load Assets/StreamingAssets/crypto-bridge.js BEFORE Unity
+    instantiates, so window.ArcTradingCryptoBridge / MetamaskBridge / PublicRpc
+    are installed when the .jslib externs first call them. The .jslib file
+    lives at Assets/Plugins/WebGL/ArcTradingCryptoBridge.jslib.
+  -->
+  <script type="module">
+    const statusEl = document.getElementById('boot-status');
+    const progressEl = document.getElementById('unity-progress-bar-full');
+    const loadingEl = document.getElementById('unity-loading-bar');
+
+    function setStatus(text, isErr) {
+      statusEl.textContent = text;
+      statusEl.className = isErr ? 'err' : '';
+    }
+
+    // ---- step 1: install browser-side crypto + RPC bridges ----
+    try {
+      await import('./StreamingAssets/crypto-bridge.js');
+    } catch (err) {
+      setStatus('crypto-bridge.js failed to load: ' + (err?.message ?? err), true);
+      console.error('[bootstrap] crypto-bridge import failed', err);
+      // Keep going — Unity will still boot, but on-chain writes will throw
+      // clear "bridge not installed" errors. Easier to diagnose this way than
+      // a blank screen.
+    }
+
+    if (!window.ArcTradingPublicRpc) {
+      setStatus('crypto-bridge.js loaded but did not install window.ArcTradingPublicRpc', true);
+      console.error('[bootstrap] expected window.ArcTradingPublicRpc to be installed');
+    } else {
+      setStatus('Booting Unity…');
+    }
+
+    // ---- step 2: boot Unity ----
+    const buildUrl = 'Build';
+    const loaderUrl = buildUrl + '/{{{ LOADER_FILENAME }}}';
+    const config = {
+      arguments: [],
+      dataUrl: buildUrl + '/{{{ DATA_FILENAME }}}',
+      frameworkUrl: buildUrl + '/{{{ FRAMEWORK_FILENAME }}}',
+      codeUrl: buildUrl + '/{{{ CODE_FILENAME }}}',
+#if MEMORY_FILENAME
+      memoryUrl: buildUrl + '/{{{ MEMORY_FILENAME }}}',
+#endif
+#if SYMBOLS_FILENAME
+      symbolsUrl: buildUrl + '/{{{ SYMBOLS_FILENAME }}}',
+#endif
+      streamingAssetsUrl: 'StreamingAssets',
+      companyName: '{{{ COMPANY_NAME }}}',
+      productName: '{{{ PRODUCT_NAME }}}',
+      productVersion: '{{{ PRODUCT_VERSION }}}',
+      showBanner: undefined,
+    };
+
+    const canvas = document.querySelector('#unity-canvas');
+
+    const script = document.createElement('script');
+    script.src = loaderUrl;
+    script.onload = () => {
+      createUnityInstance(canvas, config, (progress) => {
+        progressEl.style.width = (100 * progress) + '%';
+      }).then((unityInstance) => {
+        loadingEl.style.display = 'none';
+        window.unityInstance = unityInstance;
+      }).catch((message) => {
+        setStatus(String(message), true);
+        console.error('[bootstrap] createUnityInstance failed', message);
+      });
+    };
+    script.onerror = () => {
+      setStatus('Failed to load ' + loaderUrl, true);
+    };
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>

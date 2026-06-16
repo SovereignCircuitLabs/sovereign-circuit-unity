@@ -310,7 +310,7 @@ namespace ArcTrading.Nanopayment
         {
             if (seconds <= 0f) return Task.CompletedTask;
             var ms = Math.Max(1, (int)Math.Round(seconds * 1000f));
-            return Task.Delay(ms);
+            return ArcTrading.Crypto.WebGLAsyncBridge.DelayMsAsync(ms);
         }
 
         private string GenerateEip3009Signature(string privateKey, JObject paymentRequirements, BigInteger maxPaymentAmount)

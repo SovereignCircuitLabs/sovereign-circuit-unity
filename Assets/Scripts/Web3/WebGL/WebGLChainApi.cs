@@ -129,6 +129,39 @@ namespace ArcTrading.WebGL
             public string version;
         }
 
+        // /npc-character/:tokenId -> { tokenId, npc: NpcData }
+        // viem returns uint8/uint16/uint32 as JS numbers and uint64 as bigints;
+        // bigintToStringDeep then turns the bigints into JSON strings. So small
+        // ints stay as numbers (JsonUtility maps to byte/ushort/uint just fine)
+        // and uint64 fields arrive as strings — declared as string + parsed.
+        [Serializable] public class NpcPortfolioData
+        {
+            public ushort livingNeedsWeightBps;
+            public ushort reserveWeightBps;
+            public ushort tradingWeightBps;
+            public string minimumLivingBudgetUSDC;
+            public string minimumReserveBudgetUSDC;
+            public uint rebalanceIntervalSeconds;
+            public uint chainActionCooldownSeconds;
+            public string minTradeUSDC;
+            public string maxTradeUSDC;
+        }
+        [Serializable] public class NpcData
+        {
+            public string npcName;
+            public string metadataURI;
+            public byte archetype;
+            public byte riskLevel;
+            public ushort level;
+            public uint reputation;
+            public NpcPortfolioData portfolio;
+        }
+        [Serializable] public class NpcGetResponse
+        {
+            public string tokenId;
+            public NpcData npc;
+        }
+
         [Serializable] public class NpcOwnerResponse { public string tokenId; public string owner; }
         [Serializable] public class NpcExistsResponse { public string tokenId; public bool exists; }
         [Serializable] public class NpcBalanceResponse { public string owner; public string balance; }
@@ -150,6 +183,109 @@ namespace ArcTrading.WebGL
             public string token;
             public string depositor;
             public string withdrawalBlock;
+        }
+
+        // /npc-marketplace/listing/:tokenId -> { tokenId, listing: { seller, minPrice, active } }
+        [Serializable] public class MarketplaceListing
+        {
+            public string seller;
+            public string minPrice;
+            public bool active;
+        }
+        [Serializable] public class MarketplaceListingResponse
+        {
+            public string tokenId;
+            public MarketplaceListing listing;
+        }
+
+        // /npc-pricing/:tokenId/quote -> spread: { tokenId, price, tbaTotalValue, scarcityMultiplierBps }
+        [Serializable] public class PricingQuoteResponse
+        {
+            public string tokenId;
+            public string price;
+            public string tbaTotalValue;
+            public string scarcityMultiplierBps;
+        }
+
+        [Serializable] public class PricingClassIdResponse { public string tokenId; public string classId; }
+        [Serializable] public class PricingTbaValueResponse { public string tokenId; public string tbaTotalValue; }
+
+        // /npc-pricing/:tokenId/tba-value-breakdown -> spread: { tokenId, tba, itemValue, cashValue, tbaTotalValue }
+        [Serializable] public class PricingTbaBreakdownResponse
+        {
+            public string tokenId;
+            public string tba;
+            public string itemValue;
+            public string cashValue;
+            public string tbaTotalValue;
+        }
+
+        [Serializable] public class PricingScarcityResponse { public string classId; public string scarcityMultiplierBps; }
+
+        // /npc-pricing/class/:classId/market -> { classId, market: { ... exists } }
+        [Serializable] public class PricingClassMarket
+        {
+            public string totalSupply;
+            public string listedSupply;
+            public string virtualLiquidity;
+            public string basePrice;
+            public string maxMultiplierBps;
+            public string scarcityWeightBps;
+            public bool exists;
+        }
+        [Serializable] public class PricingClassMarketResponse
+        {
+            public string classId;
+            public PricingClassMarket market;
+        }
+
+        // /npc-character/:owner/approval-for-all/:operator -> { owner, operator, approved }
+        [Serializable] public class NpcCharacterApprovalForAllResponse
+        {
+            public string owner;
+            // "operator" is a C# keyword — JsonUtility accepts the property name verbatim, so we
+            // expose it via [SerializeField] is not necessary; field name must literally be "operator".
+            // We use @operator to escape the keyword; JsonUtility maps the field by its actual name "operator".
+            public string @operator;
+            public bool approved;
+        }
+        [Serializable] public class NpcCharacterApprovedResponse
+        {
+            public string tokenId;
+            public string approved; // address of approved operator (or zero address)
+        }
+
+        // --------------------- Tx receipts ---------------------
+
+        // Mirrors /tx/receipt/:hash. status is one of: "success", "reverted", "pending".
+        // blockNumber / gasUsed are null while pending — declared as string so JsonUtility
+        // tolerates absence; consumers use ParseBig which returns 0 for null.
+        [Serializable] public class TxReceiptResponse
+        {
+            public string txHash;
+            public string status;
+            public string blockNumber;
+            public string gasUsed;
+        }
+
+        public enum TxReceiptStatus { Pending, Success, Reverted, Unknown }
+
+        public static async Task<(TxReceiptStatus status, BigInteger blockNumber)> GetTxReceiptAsync(
+            string txHash, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(txHash))
+                return (TxReceiptStatus.Unknown, BigInteger.Zero);
+            var dto = await ArcTradingApiClient.GetJsonAsync<TxReceiptResponse>(
+                $"/tx/receipt/{txHash}", ct).ConfigureAwait(true);
+            if (dto == null) return (TxReceiptStatus.Unknown, BigInteger.Zero);
+            var status = dto.status switch
+            {
+                "success" => TxReceiptStatus.Success,
+                "reverted" => TxReceiptStatus.Reverted,
+                "pending" => TxReceiptStatus.Pending,
+                _ => TxReceiptStatus.Unknown,
+            };
+            return (status, ParseBig(dto.blockNumber));
         }
 
         // --------------------- USDC ---------------------
@@ -301,6 +437,12 @@ namespace ArcTrading.WebGL
             return (dto.wallet, version);
         }
 
+        public static async Task<NpcData> GetNpcAsync(BigInteger tokenId, CancellationToken ct = default)
+        {
+            var dto = await ArcTradingApiClient.GetJsonAsync<NpcGetResponse>($"/npc-character/{tokenId}", ct).ConfigureAwait(true);
+            return dto?.npc;
+        }
+
         public static async Task<string> NpcOwnerOfAsync(BigInteger tokenId, CancellationToken ct = default)
         {
             var dto = await ArcTradingApiClient.GetJsonAsync<NpcOwnerResponse>($"/npc-character/{tokenId}/owner", ct).ConfigureAwait(true);
@@ -359,6 +501,74 @@ namespace ArcTrading.WebGL
             var dto = await ArcTradingApiClient.GetJsonAsync<GatewayBlockResponse>(
                 $"/gateway/{token}/{depositor}/withdrawal-block", ct).ConfigureAwait(true);
             return ParseBig(dto?.withdrawalBlock);
+        }
+
+        // --------------------- NPC marketplace ---------------------
+
+        public static async Task<MarketplaceListing> GetMarketplaceListingAsync(BigInteger tokenId, CancellationToken ct = default)
+        {
+            var dto = await ArcTradingApiClient.GetJsonAsync<MarketplaceListingResponse>(
+                $"/npc-marketplace/listing/{tokenId}", ct).ConfigureAwait(true);
+            return dto?.listing;
+        } 
+
+        // --------------------- NPC pricing ---------------------
+
+        public static async Task<PricingQuoteResponse> QuoteNpcPriceAsync(BigInteger tokenId, CancellationToken ct = default)
+        {
+            return await ArcTradingApiClient.GetJsonAsync<PricingQuoteResponse>(
+                $"/npc-pricing/{tokenId}/quote", ct).ConfigureAwait(true);
+        }
+
+        public static async Task<BigInteger> GetNpcClassIdAsync(BigInteger tokenId, CancellationToken ct = default)
+        {
+            var dto = await ArcTradingApiClient.GetJsonAsync<PricingClassIdResponse>(
+                $"/npc-pricing/{tokenId}/class", ct).ConfigureAwait(true);
+            return ParseBig(dto?.classId);
+        }
+
+        public static async Task<BigInteger> GetNpcTbaTotalValueAsync(BigInteger tokenId, CancellationToken ct = default)
+        {
+            var dto = await ArcTradingApiClient.GetJsonAsync<PricingTbaValueResponse>(
+                $"/npc-pricing/{tokenId}/tba-value", ct).ConfigureAwait(true);
+            return ParseBig(dto?.tbaTotalValue);
+        }
+
+        public static async Task<PricingTbaBreakdownResponse> GetNpcTbaValueBreakdownAsync(BigInteger tokenId, CancellationToken ct = default)
+        {
+            return await ArcTradingApiClient.GetJsonAsync<PricingTbaBreakdownResponse>(
+                $"/npc-pricing/{tokenId}/tba-value-breakdown", ct).ConfigureAwait(true);
+        }
+
+        public static async Task<BigInteger> GetScarcityMultiplierBpsAsync(BigInteger classId, CancellationToken ct = default)
+        {
+            var dto = await ArcTradingApiClient.GetJsonAsync<PricingScarcityResponse>(
+                $"/npc-pricing/class/{classId}/scarcity", ct).ConfigureAwait(true);
+            return ParseBig(dto?.scarcityMultiplierBps);
+        }
+
+        public static async Task<PricingClassMarket> GetClassMarketAsync(BigInteger classId, CancellationToken ct = default)
+        {
+            var dto = await ArcTradingApiClient.GetJsonAsync<PricingClassMarketResponse>(
+                $"/npc-pricing/class/{classId}/market", ct).ConfigureAwait(true);
+            return dto?.market;
+        }
+
+        // --------------------- NPC ERC-721 marketplace approvals ---------------------
+
+        public static async Task<bool> NpcIsApprovedForAllAsync(string owner, string operatorAddr, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(operatorAddr)) return false;
+            var dto = await ArcTradingApiClient.GetJsonAsync<NpcCharacterApprovalForAllResponse>(
+                $"/npc-character/{owner}/approval-for-all/{operatorAddr}", ct).ConfigureAwait(true);
+            return dto != null && dto.approved;
+        }
+
+        public static async Task<string> NpcGetApprovedAsync(BigInteger tokenId, CancellationToken ct = default)
+        {
+            var dto = await ArcTradingApiClient.GetJsonAsync<NpcCharacterApprovedResponse>(
+                $"/npc-character/{tokenId}/approved", ct).ConfigureAwait(true);
+            return dto?.approved;
         }
 
         // --------------------- GamePayment-owned Gateway pool (admin pool) ---------------------
