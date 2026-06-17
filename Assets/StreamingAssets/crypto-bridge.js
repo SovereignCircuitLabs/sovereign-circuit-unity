@@ -30,6 +30,19 @@ import {
   http,
 } from 'https://esm.sh/viem@2'
 import * as secp from 'https://esm.sh/@noble/secp256k1@2'
+import { hmac } from 'https://esm.sh/@noble/hashes@1/hmac'
+import { sha256 } from 'https://esm.sh/@noble/hashes@1/sha2'
+
+const WALLET_SESSION_KEY = 'arc_wallet_session_v1'
+
+// @noble/secp256k1 v2 ships sync sign/verify, but the consumer must inject the
+// HMAC hash function before any sync call — otherwise sign() throws
+// "etc.hmacSha256Sync not set" on first use. In v2 the injection slot moved
+// from v1's `secp.utils.hmacSha256Sync` / mythical `secp.hashes.*` to
+// `secp.etc.hmacSha256Sync`; sha256 itself is wired internally by the
+// library, so we only need to provide HMAC.
+secp.etc.hmacSha256Sync = (key, ...msgs) =>
+  hmac(sha256, key, secp.etc.concatBytes(...msgs))
 
 // ---------------------------------------------------------------------------
 // internals
@@ -52,6 +65,33 @@ function hexToBytes (hex) {
 }
 function bigintToHex32 (n) {
   return '0x' + n.toString(16).padStart(64, '0')
+}
+
+function readCachedWalletSession () {
+  if (window.__arcWalletSession) return window.__arcWalletSession
+  try {
+    const raw = window.localStorage && window.localStorage.getItem(WALLET_SESSION_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch (_) {
+    return null
+  }
+}
+
+function writeCachedWalletSession (session) {
+  if (!session) return
+  window.__arcWalletSession = session
+  try {
+    if (window.localStorage) window.localStorage.setItem(WALLET_SESSION_KEY, JSON.stringify(session))
+  } catch (_) {
+    // localStorage may be unavailable in private mode; the in-memory cache still works.
+  }
+}
+
+function clearCachedWalletSession () {
+  window.__arcWalletSession = null
+  try {
+    if (window.localStorage) window.localStorage.removeItem(WALLET_SESSION_KEY)
+  } catch (_) {}
 }
 
 // EIP-55 mixed-case checksum address.
@@ -254,11 +294,29 @@ window.ArcTradingMetamaskBridge = {
     return startAsync(ensureEthereum().then((eth) => eth.request({ method: 'eth_chainId' })))
   },
 
+  cacheSession (session) {
+    writeCachedWalletSession(typeof session === 'string' ? JSON.parse(session) : session)
+  },
+
+  getCachedSession () {
+    const session = readCachedWalletSession()
+    return session ? JSON.stringify(session) : ''
+  },
+
+  clearCachedSession () {
+    clearCachedWalletSession()
+  },
+
   // Shared poll endpoint. Returns a JSON-stringified envelope so emscripten
   // marshalling stays simple on the C# side.
   pollRequest (id) {
     return JSON.stringify(pollAsync(id))
   },
+}
+
+if (window.ethereum && window.ethereum.on) {
+  window.ethereum.on('accountsChanged', () => clearCachedWalletSession())
+  window.ethereum.on('chainChanged', () => clearCachedWalletSession())
 }
 
 // ---------------------------------------------------------------------------

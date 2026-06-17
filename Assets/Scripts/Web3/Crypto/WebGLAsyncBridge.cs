@@ -35,6 +35,18 @@ namespace ArcTrading.Crypto
             if (string.IsNullOrEmpty(requestId))
                 throw new InvalidOperationException("WebGLAsyncBridge: bridge call returned empty request id");
 
+            var trimmedRequestId = requestId.TrimStart();
+            if (trimmedRequestId.StartsWith("{", StringComparison.Ordinal))
+            {
+                var immediate = JsonUtility.FromJson<PollEnvelope>(trimmedRequestId);
+                if (immediate != null && !string.IsNullOrEmpty(immediate.error))
+                    throw new InvalidOperationException(immediate.error);
+                if (immediate != null && !string.IsNullOrEmpty(immediate.result))
+                    return immediate.result;
+                throw new InvalidOperationException(
+                    $"WebGLAsyncBridge: bridge returned an envelope instead of a request id: {requestId}");
+            }
+
             // Hard cap the wait to avoid leaking pending state if the JS side
             // gets stuck (e.g. MetaMask popup left open forever). 5 minutes is
             // long enough for user confirmation, short enough to surface bugs.

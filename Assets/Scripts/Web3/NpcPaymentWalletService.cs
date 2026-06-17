@@ -81,8 +81,8 @@ public class NpcPaymentWalletService : MonoBehaviour
     {
         vault = new NpcPaymentKeyVault(vaultFileName);
     }
-    
-    public async Task<NpcPaymentSigner> EnsureBoundAsync(BigInteger tokenId)
+
+    private async Task<NpcPaymentSigner> EnsureBoundAsync(BigInteger tokenId)
     {
         var chainId = await npcContract.GetChainIdAsync();
         var contractAddr = npcContract.NftContractAddress;

@@ -142,8 +142,11 @@ namespace ArcTrading.Nanopayment
                 if (verboseLogging)
                     Debug.Log($"[ArcNanopayment] Paywall challenge: {requirements.ToString(Formatting.None)}");
 
-                // Step 3 — Perform local off-chain EIP-3009 signature generation
-                var signedJson = GenerateEip3009Signature(npcPrivateKey, requirements, maxPaymentAmount);
+                // Step 3 — Perform local off-chain EIP-3009 signature generation.
+                // WebGL routes through ArcTrading.Crypto.EthCryptoBackend.Current (jslib +
+                // viem) since Nethereum's secp256k1 doesn't link cleanly in WebGL; Desktop
+                // keeps the original Nethereum signer path bit-for-bit.
+                var signedJson = await GenerateEip3009SignatureAsync(npcPrivateKey, requirements, maxPaymentAmount);
                 var paymentSignatureHeader = Convert.ToBase64String(Encoding.UTF8.GetBytes(signedJson));
 
                 // Step 4 — Reattach the PAYMENT-SIGNATURE header and retry the HTTP request.
@@ -313,7 +316,7 @@ namespace ArcTrading.Nanopayment
             return ArcTrading.Crypto.WebGLAsyncBridge.DelayMsAsync(ms);
         }
 
-        private string GenerateEip3009Signature(string privateKey, JObject paymentRequirements, BigInteger maxPaymentAmount)
+        private async Task<string> GenerateEip3009SignatureAsync(string privateKey, JObject paymentRequirements, BigInteger maxPaymentAmount)
         {
             if (paymentRequirements == null) throw new ArgumentNullException(nameof(paymentRequirements));
 
@@ -335,7 +338,7 @@ namespace ArcTrading.Nanopayment
             var payTo = spec.Value<string>("payTo");
             if (string.IsNullOrEmpty(payTo))
                 throw new InvalidOperationException("payTo missing in payment requirements.");
-            
+
             // Server-priced (x402 standard): the server tells us the exact amount, we sign for that.
             // The NPC-supplied paymentAmount acts as an upper bound — refuse to overpay past it.
             var requiredString = FirstNonEmpty(
@@ -349,7 +352,7 @@ namespace ArcTrading.Nanopayment
                 throw new InvalidOperationException(
                     $"Server did not specify a payment amount in PAYMENT-REQUIRED ('{requiredString}').");
             }
-            
+
             // maxPaymentAmount is the NPC's upper bound (smallest token units).
             // The server determines the actual price via the 402 PAYMENT-REQUIRED header;
             // we refuse to sign if it exceeds this cap.
@@ -366,8 +369,8 @@ namespace ArcTrading.Nanopayment
                           ?? extra.Value<long?>("chainId")
                           ?? fallbackChainId;
 
-            var key = new EthECKey(privateKey);
-            var from = key.GetPublicAddress();
+            var domainName = extra.Value<string>("name") ?? DomainName;
+            var domainVersion = extra.Value<string>("version") ?? DomainVersion;
 
             var nowSeconds = (long)Math.Floor(
                 (DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalSeconds);
@@ -378,6 +381,56 @@ namespace ArcTrading.Nanopayment
             // to prevent replay attacks
             var nonce = new byte[32];
             using (var rng = RandomNumberGenerator.Create()) rng.GetBytes(nonce);
+            var nonceHex = "0x" + nonce.ToHex();
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // WebGL: derive address + sign EIP-712 v4 through the jslib backend (viem),
+            // since Nethereum's secp256k1 doesn't link in WebGL builds.
+            var from = ArcTrading.Crypto.EthCryptoBackend.Current.DeriveAddress(privateKey);
+            var typedDataJson = new JObject
+            {
+                ["types"] = new JObject
+                {
+                    ["EIP712Domain"] = new JArray
+                    {
+                        new JObject { ["name"] = "name", ["type"] = "string" },
+                        new JObject { ["name"] = "version", ["type"] = "string" },
+                        new JObject { ["name"] = "chainId", ["type"] = "uint256" },
+                        new JObject { ["name"] = "verifyingContract", ["type"] = "address" },
+                    },
+                    [PrimaryType] = new JArray
+                    {
+                        new JObject { ["name"] = "from", ["type"] = "address" },
+                        new JObject { ["name"] = "to", ["type"] = "address" },
+                        new JObject { ["name"] = "value", ["type"] = "uint256" },
+                        new JObject { ["name"] = "validAfter", ["type"] = "uint256" },
+                        new JObject { ["name"] = "validBefore", ["type"] = "uint256" },
+                        new JObject { ["name"] = "nonce", ["type"] = "bytes32" },
+                    },
+                },
+                ["primaryType"] = PrimaryType,
+                ["domain"] = new JObject
+                {
+                    ["name"] = domainName,
+                    ["version"] = domainVersion,
+                    ["chainId"] = chainId,
+                    ["verifyingContract"] = verifyingContract,
+                },
+                ["message"] = new JObject
+                {
+                    ["from"] = from,
+                    ["to"] = payTo,
+                    ["value"] = value.ToString(CultureInfo.InvariantCulture),
+                    ["validAfter"] = validAfter.ToString(CultureInfo.InvariantCulture),
+                    ["validBefore"] = validBefore.ToString(CultureInfo.InvariantCulture),
+                    ["nonce"] = nonceHex,
+                },
+            }.ToString(Formatting.None);
+            var signature = await ArcTrading.Crypto.EthCryptoBackend.Current
+                .SignTypedDataV4Async(typedDataJson, privateKey);
+#else
+            var key = new EthECKey(privateKey);
+            var from = key.GetPublicAddress();
 
             var message = new TransferWithAuthorizationMessage
             {
@@ -393,8 +446,8 @@ namespace ArcTrading.Nanopayment
             {
                 Domain = new Domain
                 {
-                    Name = extra.Value<string>("name") ?? DomainName,
-                    Version = extra.Value<string>("version") ?? DomainVersion,
+                    Name = domainName,
+                    Version = domainVersion,
                     ChainId = new BigInteger(chainId),
                     VerifyingContract = verifyingContract
                 },
@@ -405,6 +458,8 @@ namespace ArcTrading.Nanopayment
             };
 
             var signature = new Eip712TypedDataSigner().SignTypedDataV4(message, typedData, key);
+            await Task.CompletedTask;
+#endif
 
             // Circle x402 payload
             var payload = new JObject
@@ -422,7 +477,7 @@ namespace ArcTrading.Nanopayment
                         ["value"] = value.ToString(CultureInfo.InvariantCulture),
                         ["validAfter"] = validAfter.ToString(CultureInfo.InvariantCulture),
                         ["validBefore"] = validBefore.ToString(CultureInfo.InvariantCulture),
-                        ["nonce"] = "0x" + nonce.ToHex()
+                        ["nonce"] = nonceHex
                     }
                 }
             };

@@ -245,23 +245,43 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<decimal> GetVaultBalanceUSDCAsync(string account)
     {
         if (string.IsNullOrWhiteSpace(account)) return 0m;
-// TODO: vault USDC not correctly display, need to be fixed.
 #if UNITY_WEBGL && !UNITY_EDITOR
+        Debug.Log($"[{name}] GetVaultBalanceUSDCAsync WEBGL account={account}");
         var items = await ArcTrading.WebGL.WebGLChainApi.GetTbaItemBalancesAsync(account);
         var sellPricesArr = await ArcTrading.WebGL.WebGLChainApi.GetAllSellPricesRawAsync();
+        Debug.Log(
+            $"[{name}] GetVaultBalanceUSDCAsync WEBGL fetched items.ids.Length={items?.ids?.Length ?? -1} " +
+            $"items.balances.Length={items?.balances?.Length ?? -1} sellPrices.Length={sellPricesArr?.Length ?? -1}");
         BigInteger totalUnits = BigInteger.Zero;
         if (items?.balances != null)
         {
             int n = Math.Min(items.balances.Length, sellPricesArr.Length);
             for (int i = 0; i < n; i++)
             {
-                if (string.IsNullOrEmpty(items.balances[i])) continue;
-                var bal = BigInteger.Parse(items.balances[i]);
-                if (bal == BigInteger.Zero) continue;
-                totalUnits += bal * sellPricesArr[i];
+                var rawBal = items.balances[i];
+                if (string.IsNullOrEmpty(rawBal))
+                {
+                    Debug.Log($"  [{i}] balance string empty -> skip");
+                    continue;
+                }
+                var bal = BigInteger.Parse(rawBal);
+                if (bal == BigInteger.Zero)
+                {
+                    Debug.Log($"  [{i}] balance=0 (id={items.ids?[i]}) sellPrice={sellPricesArr[i]} -> skip");
+                    continue;
+                }
+                var contrib = bal * sellPricesArr[i];
+                Debug.Log($"  [{i}] id={items.ids?[i]} balance={bal} sellPrice={sellPricesArr[i]} contrib={contrib}");
+                totalUnits += contrib;
             }
         }
-        return FromUsdc(totalUnits);
+        else
+        {
+            Debug.LogWarning($"[{name}] GetVaultBalanceUSDCAsync WEBGL items.balances is null — server response not decoded");
+        }
+        var resultWebgl = FromUsdc(totalUnits);
+        Debug.Log($"[{name}] GetVaultBalanceUSDCAsync WEBGL totalUnits={totalUnits} -> {resultWebgl} USDC");
+        return resultWebgl;
 #else
         var contract = readOnlyWeb3.Eth.GetContract(Abi, contractAddress);
 
@@ -767,13 +787,19 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<decimal> GetGatewayAvailableBalanceUSDCAsync()
     {
         var arcNanopayment = GetComponent<ArcNanopaymentClient>();
-        if (arcNanopayment == null) return 0m;
+        if (arcNanopayment == null)
+        {
+            Debug.LogWarning($"[{name}] GetGatewayAvailableBalanceUSDCAsync: ArcNanopaymentClient component missing -> returning 0");
+            return 0m;
+        }
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         var signer = await GetTraderSignerAsync();
+        Debug.Log($"[{name}] GetGatewayAvailableBalanceUSDCAsync WEBGL signer.address={signer.address} usdc={Erc20UsdcHelper.ArcUsdcAddress}");
         var balance = await arcNanopayment.GatewayAvailableBalanceAsync(
             Erc20UsdcHelper.ArcUsdcAddress,
             signer.address);
+        Debug.Log($"[{name}] GetGatewayAvailableBalanceUSDCAsync WEBGL raw balance smallest-units={balance}");
 #else
         var web3 = await CreateSignedWeb3Async();
         var balance = await arcNanopayment.GatewayAvailableBalanceAsync(
@@ -781,7 +807,7 @@ public class ArcTradingContractClient : MonoBehaviour
             web3.TransactionManager.Account.Address);
 #endif
         var onchain = FromUsdc(balance);
-        
+
         if (gatewayBaselineInitialized && onchain < lastKnownOnchainGatewayUsdc)
         {
             var settled = lastKnownOnchainGatewayUsdc - onchain;
@@ -794,7 +820,13 @@ public class ArcTradingContractClient : MonoBehaviour
         gatewayBaselineInitialized = true;
 
         var effective = onchain - pendingX402OutflowUsdc;
-        return effective < 0m ? 0m : effective;
+        var clamped = effective < 0m ? 0m : effective;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        Debug.Log(
+            $"[{name}] GetGatewayAvailableBalanceUSDCAsync WEBGL onchain={onchain} " +
+            $"pendingX402Outflow={pendingX402OutflowUsdc} effective={effective} -> returning {clamped}");
+#endif
+        return clamped;
     }
 
     private void RecordX402Outflow(BigInteger paidSmallestUnits)
@@ -825,21 +857,42 @@ public class ArcTradingContractClient : MonoBehaviour
     public async Task<string> MintRandomAsync(BigInteger itemIdToBeMinted, bool nanopayment = false)
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
-        // nanopayment=true is the ONLY WebGL path that works without local signing:
-        // /game/mint-random-x402 takes `to=tba` as a contract arg, so the server's
-        // serverAccount can call it on the player's behalf without forging identity
-        // (server is paying its own x402 dispatcher cost). The minted NFT lands at
-        // the player's TBA. This is fine.
+        // nanopayment=true: run the same x402 client-server handshake as Desktop —
+        // GET /item/{id} → 402 PAYMENT-REQUIRED → sign EIP-3009 locally with the
+        // NPC's paymentWallet → retry with PAYMENT-SIGNATURE + X-NPC-TBA headers →
+        // poll /order/{id}. The signing piece lives in ArcNanopaymentClient and
+        // routes through IEthCryptoBackend so the WebGL build signs in-browser
+        // (no server-held key, no /game/mint-random-x402 admin shortcut).
         //
         // nanopayment=false (plain mintRandom from TBA's USDC) requires the NPC's
-        // paymentWallet to sign — TODO Phase 5 via IEthCryptoBackend + /tx/send-raw.
+        // paymentWallet to sign — via IEthCryptoBackend + /tx/send-raw.
         if (nanopayment)
         {
+            if (npcPaymentWalletService == null)
+                throw new InvalidOperationException(
+                    $"{name}: npcPaymentWalletService is not wired — nanopayment path cannot resolve the NPC operator key.");
             if (nftTokenId == 0)
                 throw new InvalidOperationException(
                     $"{name}: nftTokenId is 0 — set it to the deployed NPC NFT tokenId before enabling nanopayment.");
+
+            var arcNanopaymentWebgl = GetComponent<ArcNanopaymentClient>();
+            var capUsdcWebgl = (decimal)arcNanopaymentWebgl.maxNanopaymentUsdc;
+            var nanopaymentCapWebgl = Erc20UsdcHelper.ParseUsdc(capUsdcWebgl);
+
+            var effectiveAvailableUsdcWebgl = await GetGatewayAvailableBalanceUSDCAsync();
+            if (effectiveAvailableUsdcWebgl < capUsdcWebgl)
+                await arcNanopaymentWebgl.ApproveIfNeededThenGatewayDepositAsync((decimal)arcNanopaymentWebgl.maxNanopaymentUsdc);
+
             var tbaWebgl = await EnsureTbaAddressAsync();
-            return await ArcTrading.WebGL.WebGLWalletApi.MintRandomX402Async(tbaWebgl);
+
+            var contentWebgl = await arcNanopaymentWebgl.FetchPaywalledResourceAsync(
+                arcNanopaymentWebgl.x402ServerBaseUrl + itemIdToBeMinted,
+                NftTokenId,
+                npcPaymentWalletService,
+                nanopaymentCapWebgl,
+                tbaWebgl);
+            RecordX402Outflow(arcNanopaymentWebgl.LastPaidAmountSmallestUnits);
+            return contentWebgl;
         }
 
         var maxBuyPriceWebgl = await GetMaxBuyPriceAsync();
@@ -905,11 +958,10 @@ public class ArcTradingContractClient : MonoBehaviour
     /// <summary>
     /// Sell one NFT held by the NPC's ERC-6551 TBA.
     /// Desktop: signed by the local paymentWallet, routed through the TBA execute() call.
-    /// WebGL: TODO Phase 5 — must locally sign TBA.execute(sellItem(itemId)) using the
-    /// in-browser paymentWallet (generated via jslib + viem), then broadcast through
-    /// the server's POST /tx/send-raw relay. Routing it through a server-held wallet
-    /// would turn the operational paymentWallet into a custodial key, which violates
-    /// the binding architecture (see [[npc-payment-binding-architecture]]).
+    /// WebGL: must locally sign TBA.execute(sellItem(itemId)) using thein-browser paymentWallet
+    /// (generated via jslib + viem), then broadcast through the server's POST /tx/send-raw relay.
+    /// Routing it through a server-held wallet would turn the operational paymentWallet into a
+    /// custodial key, which violates the binding architecture.
     /// </summary>
     public async Task<string> SellItemAsync(string tbaAddress, BigInteger itemId)
     {

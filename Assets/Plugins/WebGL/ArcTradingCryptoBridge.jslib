@@ -256,6 +256,29 @@ mergeInto(LibraryManager.library, {
     return ptr;
   },
 
+  ArcMm_GetCachedSession: function () {
+    var b = window.ArcTradingMetamaskBridge;
+    var out = '';
+    try {
+      out = b && b.getCachedSession ? b.getCachedSession() : '';
+    } catch (e) {
+      out = '';
+    }
+    var sz = lengthBytesUTF8(out) + 1;
+    var ptr = _malloc(sz);
+    stringToUTF8(out, ptr, sz);
+    return ptr;
+  },
+
+  ArcMm_ClearCachedSession: function () {
+    var b = window.ArcTradingMetamaskBridge;
+    try {
+      if (b && b.clearCachedSession) b.clearCachedSession();
+    } catch (e) {
+      console.warn('[ArcMm_ClearCachedSession]', e);
+    }
+  },
+
   ArcMm_PollRequest: function (idPtr) {
     var b = window.ArcTradingMetamaskBridge;
     var id = UTF8ToString(idPtr);
@@ -275,6 +298,7 @@ mergeInto(LibraryManager.library, {
     try {
       if (!b || typeof b.configure !== 'function') throw new Error('publicRpc.configure not installed');
       b.configure(url);
+      if (window.__arcOnPublicRpcConfigured) window.__arcOnPublicRpcConfigured(url);
     } catch (e) {
       console.error('[ArcPubRpc_Configure]', e);
     }
@@ -320,6 +344,28 @@ mergeInto(LibraryManager.library, {
     var ptr = _malloc(sz);
     stringToUTF8(out, ptr, sz);
     return ptr;
+  },
+
+  // ------------------ Dashboard config (Unity → HTML) ------------------
+  // The WebGL template's dashboard panels (NPC leaderboard + GameItems price
+  // chart) need rpcUrl / contract addresses, which live in Unity Inspector.
+  // Unity pushes them here at boot via JsonUtility.ToJson; the page-side
+  // installArcDashboardConfig reveals the panels and (re)starts polling.
+  // If installArcDashboardConfig isn't installed yet (Unity boots faster than
+  // the HTML's <script type="module"> resolves), we stash on window and the
+  // dashboard picks it up when it boots.
+  ArcDashboard_SetConfig: function (jsonPtr) {
+    var json = UTF8ToString(jsonPtr);
+    try {
+      var cfg = JSON.parse(json);
+      if (typeof window.installArcDashboardConfig === 'function') {
+        window.installArcDashboardConfig(cfg);
+      } else {
+        window.__pendingArcDashboardConfig = cfg;
+      }
+    } catch (e) {
+      console.error('[ArcDashboard_SetConfig] failed to apply config', e, json);
+    }
   },
 });
 

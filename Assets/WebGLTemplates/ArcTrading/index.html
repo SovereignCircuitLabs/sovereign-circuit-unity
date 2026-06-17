@@ -3,72 +3,1474 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
   <title>{{{ PRODUCT_NAME }}}</title>
   <link rel="shortcut icon" href="TemplateData/favicon.ico" />
+
+  <!--
+    Runtime config for the dashboard panels (leaderboard + price chart).
+    Same shape as the JSON WalletLoginServer injects into walletlogin/index.html
+    via __LOGIN_CONFIG__. Edit `content` (or override at build time via a
+    post-process script) to point the dashboard at your RPC + contracts. Empty
+    string for any field hides the matching panel.
+
+    Override at runtime by appending hash params, e.g.
+      index.html#rpcUrl=https://rpc.example&gamePaymentAddress=0xabc...
+  -->
+  <meta name="arc-trading-runtime-config" content='{
+    "chainId": 0,
+    "rpcUrl": "",
+    "gamePaymentAddress": "",
+    "npcCharacterAddress": "",
+    "usdcAddress": "",
+    "gatewayAddress": ""
+  }' />
+
   <style>
-    body { margin: 0; padding: 0; background: #111; color: #eee;
-           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
-    #unity-container { position: absolute; inset: 0; }
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d12;
+      --panel: #151823;
+      --panel-2: #1a1d26;
+      --border: #242938;
+      --border-strong: #2f3650;
+      --fg: #e6e9f2;
+      --muted: #8b91a8;
+      --accent: #66b2ff;
+      --accent-2: #82c0ff;
+      --ok: #5cd197;
+      --err: #ff7a7a;
+      --gold: #ffd166;
+      --header-h: 56px;
+      --footer-h: 36px;
+      --side-w: 340px;
+      --gutter: 10px;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0; padding: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 0%, rgba(102, 178, 255, 0.06), transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 100%, rgba(102, 178, 255, 0.04), transparent 60%),
+        var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      overflow: hidden;
+    }
+
+    /* ---- shell grid ---- */
+    #app-shell {
+      display: grid;
+      width: 100vw; height: 100vh;
+      grid-template-columns: var(--side-w) 1fr var(--side-w);
+      grid-template-rows: var(--header-h) 1fr var(--footer-h);
+      grid-template-areas:
+        "header header header"
+        "left   stage  right"
+        "footer footer footer";
+      gap: var(--gutter);
+      padding: var(--gutter);
+      box-sizing: border-box;
+    }
+    #ui-header { grid-area: header; }
+    #ui-left   { grid-area: left; }
+    #ui-right  { grid-area: right; }
+    #unity-stage { grid-area: stage; position: relative; min-width: 0; min-height: 0; }
+    #ui-footer { grid-area: footer; }
+
+    /* ---- panels (cards) ---- */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      box-sizing: border-box;
+      overflow: auto;
+    }
+    .side-panel { display: flex; flex-direction: column; gap: 12px; }
+    .side-panel > .panel { flex: 0 0 auto; }
+    .side-panel > .panel.grow { flex: 1 1 auto; min-height: 0; }
+    .panel-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .panel-header h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .panel-header .meta {
+      color: var(--muted);
+      font-size: 11px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    .row + .row { margin-top: 10px; }
+    label { display: block; font-size: 11px; color: var(--muted);
+            text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+    .value {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 12px;
+      word-break: break-all;
+      color: var(--fg);
+    }
+
+    /* ---- header bar ---- */
+    #ui-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent), var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 700; letter-spacing: .08em; font-size: 15px;
+    }
+    .brand .logo-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 12px var(--accent);
+      animation: logo-pulse 2.4s ease-in-out infinite;
+    }
+    @keyframes logo-pulse {
+      0%, 100% { box-shadow: 0 0 6px var(--accent), 0 0 0 0 rgba(102,178,255,0); }
+      50%      { box-shadow: 0 0 14px var(--accent), 0 0 24px rgba(102,178,255,.4); }
+    }
+    .brand small { font-weight: 400; color: var(--muted); font-size: 11px;
+                   letter-spacing: .04em; margin-left: 6px; }
+
+    /* ---- arc testnet badge in brand ---- */
+    .arc-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-left: 12px;
+      padding: 3px 10px 3px 8px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(102,178,255,.18), rgba(130,192,255,.05));
+      border: 1px solid rgba(102,178,255,.4);
+      color: var(--accent-2);
+      font-size: 10px; font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      box-shadow: inset 0 0 12px rgba(102,178,255,.08);
+    }
+    .arc-badge svg { width: 14px; height: 14px; flex: 0 0 auto;
+                     animation: arc-spin 14s linear infinite; }
+    @keyframes arc-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--muted);
+      font-size: 11px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    .pill .dot { width: 6px; height: 6px; border-radius: 50%;
+                 background: var(--muted); }
+    .pill.ok .dot { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+    .pill.err .dot { background: var(--err); }
+    .pill.ok { color: var(--ok); border-color: rgba(92, 209, 151, .35); }
+    .pill.err { color: var(--err); border-color: rgba(255, 122, 122, .35); }
+
+    button {
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #1d2230;
+      color: var(--fg);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, box-shadow .15s;
+    }
+    button:hover:not(:disabled) { background: #232a3b; border-color: var(--border-strong); }
+    button.primary {
+      background: var(--accent); border-color: var(--accent); color: #061322;
+      box-shadow: 0 0 0 0 rgba(102, 178, 255, 0);
+    }
+    button.primary:hover:not(:disabled) {
+      background: var(--accent-2);
+      box-shadow: 0 0 18px rgba(102, 178, 255, .35);
+    }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.toggle {
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 500;
+      border-radius: 6px;
+    }
+    button.toggle.active { background: var(--accent); border-color: var(--accent); color: #061322; }
+    button.icon { padding: 6px 10px; font-size: 12px; font-weight: 500; }
+
+    /* ---- faucet link (looks like a button) ---- */
+    a#btn-faucet {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      text-decoration: none;
+      font-size: 12px; font-weight: 600;
+      border-radius: 8px;
+      border: 1px solid rgba(92, 209, 151, .35);
+      background: rgba(92, 209, 151, .08);
+      color: var(--ok);
+      transition: background .15s, border-color .15s, box-shadow .15s, transform .12s;
+    }
+    a#btn-faucet:hover {
+      background: rgba(92, 209, 151, .16);
+      border-color: rgba(92, 209, 151, .6);
+      box-shadow: 0 0 14px rgba(92, 209, 151, .22);
+      transform: translateY(-1px);
+    }
+    a#btn-faucet svg { width: 13px; height: 13px; }
+    a#btn-faucet svg .drip {
+      transform-origin: 12px 6px;
+      animation: faucet-drip 2.4s ease-in-out infinite;
+    }
+    @keyframes faucet-drip {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0; }
+      70%           { transform: translateY(0); opacity: 1; }
+      95%           { transform: translateY(8px); opacity: 0; }
+    }
+
+    .status { font-size: 12px; min-height: 16px; color: var(--muted); }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+
+    /* ---- stage ---- */
+    #unity-stage {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #unity-container {
+      position: relative;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 0 0 1px var(--border), 0 12px 40px rgba(0,0,0,.45);
+    }
     #unity-canvas { width: 100%; height: 100%; background: #000; display: block; }
-    #unity-loading-bar { position: absolute; left: 50%; top: 50%;
-                        transform: translate(-50%, -50%); text-align: center; }
-    #unity-progress-bar-empty { width: 320px; height: 6px; background: #222;
-                                border-radius: 3px; overflow: hidden; }
-    #unity-progress-bar-full { width: 0%; height: 100%; background: #66b2ff;
-                               transition: width .15s linear; }
-    #boot-status { margin-top: 12px; font-size: 13px; color: #8b91a8; min-height: 18px; }
-    #boot-status.err { color: #ff7a7a; }
+    #unity-loading-bar {
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%); text-align: center;
+    }
+    #unity-progress-bar-empty {
+      width: 320px; height: 6px; background: #222;
+      border-radius: 3px; overflow: hidden;
+    }
+    #unity-progress-bar-full {
+      width: 0%; height: 100%; background: var(--accent);
+      transition: width .15s linear;
+    }
+    #boot-status { margin-top: 12px; font-size: 13px; color: var(--muted); min-height: 18px; }
+    #boot-status.err { color: var(--err); }
+
+    /* ---- footer ---- */
+    #ui-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 11px;
+      color: var(--muted);
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    #ui-footer .footer-section { display: flex; gap: 16px; align-items: center; }
+    #ui-footer code { color: var(--fg); }
+    .testnet-notice {
+      flex: 1;
+      text-align: center;
+      color: var(--gold);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 11px; font-weight: 600;
+      letter-spacing: .04em;
+      opacity: .92;
+      padding: 0 16px;
+    }
+    .testnet-notice .pulse-mark {
+      display: inline-block;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--gold);
+      box-shadow: 0 0 6px var(--gold);
+      margin-right: 8px;
+      vertical-align: middle;
+      animation: notice-pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes notice-pulse {
+      0%, 100% { opacity: .4; transform: scale(.85); }
+      50%      { opacity: 1;  transform: scale(1.15); }
+    }
+
+    /* ---- leaderboard ---- */
+    table.leaderboard {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    table.leaderboard th, table.leaderboard td {
+      text-align: left;
+      padding: 6px 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    table.leaderboard td.num,
+    table.leaderboard th.num { padding-left: 4px; padding-right: 4px;
+                               text-align: right; font-variant-numeric: tabular-nums; }
+    table.leaderboard th {
+      color: var(--muted);
+      font-weight: 500;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    table.leaderboard td.mono { font-family: ui-monospace, Menlo, monospace; }
+    table.leaderboard tr.rank-1 td.rank { color: var(--gold); font-weight: 700; }
+    table.leaderboard tr.rank-2 td.rank { color: #d8d8d8; font-weight: 700; }
+    table.leaderboard tr.rank-3 td.rank { color: #c98e63; font-weight: 700; }
+    table.leaderboard tr:last-child td { border-bottom: 0; }
+    .empty { padding: 16px 4px; color: var(--muted);
+             font-size: 12px; text-align: center; }
+    .leaderboard-header-controls { display: flex; align-items: center; gap: 8px; }
+    #btn-leaderboard-refresh.is-busy { opacity: .6; cursor: progress; }
+
+    /* ---- price chart ---- */
+    #prices-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #prices-panel .panel-header { flex: 0 0 auto; }
+    #price-chart-wrap {
+      position: relative;
+      width: 100%;
+      flex: 1 1 auto;
+      min-height: 260px;
+      border-radius: 8px;
+      background:
+        radial-gradient(ellipse 100% 80% at 50% 100%, rgba(102,178,255,.06), transparent 70%),
+        linear-gradient(180deg, rgba(255,255,255,.015), rgba(0,0,0,.18));
+      border: 1px solid rgba(255,255,255,.04);
+      overflow: hidden;
+    }
+    #price-chart-wrap::before {
+      /* subtle moving sheen overlay so the panel feels alive even with sparse data */
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(115deg, transparent 40%, rgba(102,178,255,.05) 50%, transparent 60%);
+      background-size: 220% 100%;
+      animation: chart-sheen 6s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes chart-sheen {
+      from { background-position: 100% 0; }
+      to   { background-position: -120% 0; }
+    }
+    #price-chart { width: 100%; height: 100%; display: block; position: relative; }
+    .legend {
+      display: flex; flex-wrap: wrap;
+      gap: 6px 12px;
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--muted);
+      flex: 0 0 auto;
+    }
+    .legend .swatch {
+      display: inline-block; width: 8px; height: 8px;
+      border-radius: 2px;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+    .chart-controls { display: flex; gap: 4px; }
   </style>
 </head>
 <body>
-  <div id="unity-container">
-    <canvas id="unity-canvas" tabindex="-1"></canvas>
-    <div id="unity-loading-bar">
-      <div id="unity-progress-bar-empty">
-        <div id="unity-progress-bar-full"></div>
+  <div id="app-shell">
+
+    <!-- ====== header ====== -->
+    <header id="ui-header">
+      <div class="brand">
+        <span class="logo-dot"></span>
+        <span>{{{ PRODUCT_NAME }}}</span>
+        <small>v{{{ PRODUCT_VERSION }}}</small>
+        <span class="arc-badge" title="Built for Arc Sepolia testnet">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M3 12 a 9 9 0 0 1 18 0" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+            <path d="M7 14 a 5 5 0 0 1 10 0" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" opacity=".7"/>
+            <circle cx="12" cy="18" r="1.8" fill="currentColor"/>
+          </svg>
+          <span>Arc Testnet</span>
+        </span>
       </div>
-      <div id="boot-status">Loading crypto bridge…</div>
+      <div class="header-right">
+        <span class="pill" id="chain-pill" title="Active chain"><span class="dot"></span><span id="chain-label">No chain</span></span>
+        <span class="pill" id="address-pill" style="display:none" title="Connected wallet">
+          <span class="dot"></span><span id="address-label">—</span>
+        </span>
+        <a id="btn-faucet" href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer"
+           title="Open the Circle Arc testnet faucet">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 3 C 12 3 6 10 6 14.5 a 6 6 0 0 0 12 0 C 18 10 12 3 12 3 Z"
+                  fill="currentColor" opacity=".95"/>
+            <circle class="drip" cx="12" cy="6" r="1.6" fill="currentColor"/>
+          </svg>
+          <span>Faucet</span>
+        </a>
+        <button id="btn-connect" class="primary" type="button">Connect Wallet</button>
+        <button id="btn-sign" class="icon" type="button" disabled>Sign In</button>
+      </div>
+    </header>
+
+    <!-- ====== left sidebar: price chart ====== -->
+    <aside id="ui-left" class="side-panel">
+      <section class="panel grow" id="prices-panel">
+        <div class="panel-header">
+          <h2>GameItems Price Trend</h2>
+          <div class="chart-controls">
+            <button class="toggle active" data-mode="buy" type="button">Buy</button>
+            <button class="toggle" data-mode="sell" type="button">Sell</button>
+          </div>
+        </div>
+        <div id="price-chart-wrap">
+          <canvas id="price-chart" width="680" height="240"></canvas>
+        </div>
+        <div class="legend" id="price-legend"></div>
+        <div class="meta" id="prices-meta" style="margin-top:8px;color:var(--muted);font-size:11px;">—</div>
+      </section>
+
+      <section class="panel" id="login-detail-panel">
+        <div class="panel-header">
+          <h2>Wallet Session</h2>
+        </div>
+        <div class="row">
+          <label>Network</label>
+          <div class="value" id="chain-id">—</div>
+        </div>
+        <div class="row">
+          <label>Connected Address</label>
+          <div class="value" id="address">—</div>
+        </div>
+        <div class="row">
+          <label>Challenge Nonce</label>
+          <div class="value" id="nonce">—</div>
+        </div>
+        <div id="status" class="status" style="margin-top:10px">Detecting wallet…</div>
+      </section>
+    </aside>
+
+    <!-- ====== center: Unity ====== -->
+    <div id="unity-stage">
+      <div id="unity-container">
+        <canvas id="unity-canvas" tabindex="-1"></canvas>
+        <div id="unity-loading-bar">
+          <div id="unity-progress-bar-empty">
+            <div id="unity-progress-bar-full"></div>
+          </div>
+          <div id="boot-status">Loading crypto bridge…</div>
+        </div>
+      </div>
     </div>
+
+    <!-- ====== right sidebar: leaderboard ====== -->
+    <aside id="ui-right" class="side-panel">
+      <section class="panel grow" id="leaderboard-panel">
+        <div class="panel-header">
+          <h2>NPC Wealth Leaderboard</h2>
+          <div class="leaderboard-header-controls">
+            <span class="meta" id="leaderboard-meta">—</span>
+            <button id="btn-leaderboard-refresh" class="toggle" type="button" title="Refresh now">Refresh</button>
+          </div>
+        </div>
+        <div id="leaderboard-body">
+          <div class="empty">Loading on-chain NPCs…</div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- ====== footer ====== -->
+    <footer id="ui-footer">
+      <div class="footer-section">
+        <span>RPC <code id="footer-rpc">—</code></span>
+        <span>GamePayment <code id="footer-game">—</code></span>
+      </div>
+      <div class="testnet-notice">
+        <span class="pulse-mark"></span>Currently in early open testing &mdash; does not represent final product quality.
+      </div>
+      <div class="footer-section">
+        <span id="footer-status">idle</span>
+      </div>
+    </footer>
   </div>
 
   <!--
-    Custom bootstrap: load Assets/StreamingAssets/crypto-bridge.js BEFORE Unity
-    instantiates, so window.ArcTradingCryptoBridge / MetamaskBridge / PublicRpc
-    are installed when the .jslib externs first call them. The .jslib file
-    lives at Assets/Plugins/WebGL/ArcTradingCryptoBridge.jslib.
+    Bootstrap:
+      1. Load StreamingAssets/crypto-bridge.js so window.ArcTradingCryptoBridge /
+         MetamaskBridge / PublicRpc are installed before Unity's .jslib externs
+         call them.
+      2. Wire dashboard panels (leaderboard + price chart + wallet connect)
+         using ethers v6 against cfg.rpcUrl. These run independent of Unity so
+         the user sees data even before the game finishes loading.
+      3. Boot Unity into #unity-canvas.
   -->
   <script type="module">
+    import { JsonRpcProvider, Contract, ZeroAddress, formatUnits } from 'https://esm.sh/ethers@6.13.4';
+
     const statusEl = document.getElementById('boot-status');
     const progressEl = document.getElementById('unity-progress-bar-full');
     const loadingEl = document.getElementById('unity-loading-bar');
+    const footerStatus = document.getElementById('footer-status');
+    const unityStageEl = document.getElementById('unity-stage');
+    const unityContainerEl = document.getElementById('unity-container');
+    let unityInstanceRef = null;
 
-    function setStatus(text, isErr) {
+    function setBootStatus(text, isErr) {
       statusEl.textContent = text;
       statusEl.className = isErr ? 'err' : '';
     }
+    function setFooterStatus(text) { footerStatus.textContent = text; }
+    async function refreshRuntimeChainInfo(rpcUrl) {
+      if (rpcUrl) {
+        cfg.rpcUrl = rpcUrl;
+        document.getElementById('footer-rpc').textContent = shortenHost(rpcUrl);
+      }
+
+      const rpc = rpcUrl || cfg.rpcUrl;
+      if (!rpc) return;
+
+      try {
+        const res = await fetch(rpc, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method: 'eth_chainId', params: [] }),
+        });
+        const json = await res.json();
+        if (json.error) throw new Error(json.error.message ?? JSON.stringify(json.error));
+        const chainId = Number.parseInt(json.result, 16) || 0;
+        cfg.chainId = chainId;
+        document.getElementById('chain-id').textContent = `Chain ID ${chainId}`;
+        document.getElementById('chain-label').textContent = `Chain ${chainId}`;
+        document.getElementById('chain-pill').classList.toggle('ok', chainId > 0);
+      } catch (err) {
+        console.warn('[config] failed to refresh chain id from RPC', err);
+      }
+    }
+    function resizeUnityViewport() {
+      const stageW = unityStageEl.clientWidth;
+      const stageH = unityStageEl.clientHeight;
+      if (!stageW || !stageH) return;
+      const width = Math.floor(Math.min(stageW, stageH * 16 / 9));
+      const height = Math.floor(width * 9 / 16);
+      unityContainerEl.style.width = `${width}px`;
+      unityContainerEl.style.height = `${height}px`;
+      if (unityInstanceRef?.Module?.setCanvasSize) {
+        const dpr = window.devicePixelRatio || 1;
+        unityInstanceRef.Module.setCanvasSize(Math.floor(width * dpr), Math.floor(height * dpr));
+      }
+    }
+    resizeUnityViewport();
+    window.addEventListener('resize', resizeUnityViewport);
+    if (window.ResizeObserver) new ResizeObserver(resizeUnityViewport).observe(unityStageEl);
+
+    window.__arcOnPublicRpcConfigured = refreshRuntimeChainInfo;
+    installPublicRpcFallback();
+    installMetamaskBridgeFallback();
 
     // ---- step 1: install browser-side crypto + RPC bridges ----
+    // The fallbacks above already cover MetaMask interactions (via
+    // window.ethereum) and public RPC reads (via fetch). The import below
+    // additionally installs window.ArcTradingCryptoBridge — needed only for
+    // local-paymentWallet signing (viem + @noble/secp256k1 from esm.sh). If
+    // the import fails, MetaMask flows (login, listing, cancellation, buy)
+    // keep working; only the NPC-side local-signing paths break.
+    let cryptoBridgeLoaded = false;
     try {
       await import('./StreamingAssets/crypto-bridge.js');
+      cryptoBridgeLoaded = true;
     } catch (err) {
-      setStatus('crypto-bridge.js failed to load: ' + (err?.message ?? err), true);
       console.error('[bootstrap] crypto-bridge import failed', err);
-      // Keep going — Unity will still boot, but on-chain writes will throw
-      // clear "bridge not installed" errors. Easier to diagnose this way than
-      // a blank screen.
+      const reason = err?.message ?? String(err);
+      setBootStatus('crypto-bridge.js failed: ' + reason +
+        ' (MetaMask flows still work; NPC local signing disabled)', true);
+      // Surface in the footer so the error doesn't disappear when Unity hides
+      // the loading bar after createUnityInstance resolves.
+      setFooterStatus('crypto-bridge error — check console');
     }
 
-    if (!window.ArcTradingPublicRpc) {
-      setStatus('crypto-bridge.js loaded but did not install window.ArcTradingPublicRpc', true);
-      console.error('[bootstrap] expected window.ArcTradingPublicRpc to be installed');
+    if (!cryptoBridgeLoaded || !window.ArcTradingCryptoBridge) {
+      // Loud-but-non-fatal: keep going so the MetaMask-backed UI still works.
+      console.warn('[bootstrap] window.ArcTradingCryptoBridge missing — local paymentWallet signing is disabled');
     } else {
-      setStatus('Booting Unity…');
+      setBootStatus('Booting Unity…');
     }
 
-    // ---- step 2: boot Unity ----
+    function installPublicRpcFallback() {
+      if (window.ArcTradingPublicRpc?.pollRequest) return;
+
+      const pending = new Map();
+      let nextRequestId = 1;
+      let rpcUrl = '';
+
+      function startAsync(promise) {
+        const id = String(nextRequestId++);
+        pending.set(id, { resolved: false });
+        promise.then(
+          (result) => pending.set(id, { resolved: true, result: String(result ?? '') }),
+          (err) => pending.set(id, { resolved: true, error: String(err?.message ?? err) }),
+        );
+        return id;
+      }
+
+      function poll(id) {
+        const entry = pending.get(id);
+        if (!entry) return { error: 'unknown publicRpc request id ' + id };
+        if (!entry.resolved) return { pending: true };
+        pending.delete(id);
+        return entry.error ? { error: entry.error } : { result: entry.result };
+      }
+
+      async function rpc(method, params = []) {
+        if (!rpcUrl) throw new Error('publicRpc not configured');
+        const res = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
+        });
+        if (!res.ok) throw new Error(`RPC HTTP ${res.status}`);
+        const json = await res.json();
+        if (json.error) throw new Error(json.error.message ?? JSON.stringify(json.error));
+        return json.result;
+      }
+
+      function hexToDecimalString(hex) {
+        if (!hex) return '0';
+        return BigInt(hex).toString(10);
+      }
+
+      window.ArcTradingPublicRpc = {
+        configure(url) {
+          rpcUrl = url;
+          window.__arcOnPublicRpcConfigured?.(url);
+        },
+        isConfigured() { return !!rpcUrl; },
+        getTransactionCount(address) {
+          return startAsync(rpc('eth_getTransactionCount', [address, 'pending']).then(hexToDecimalString));
+        },
+        getGasPrice() {
+          return startAsync(rpc('eth_gasPrice').then(hexToDecimalString));
+        },
+        getChainId() {
+          return startAsync(rpc('eth_chainId').then(hexToDecimalString));
+        },
+        pollRequest(id) {
+          return JSON.stringify(poll(id));
+        },
+      };
+      console.log('[ArcTradingPublicRpc] installed fetch fallback');
+    }
+
+    // ---- MetamaskBridge fallback ----
+    // Mirrors the API that crypto-bridge.js's window.ArcTradingMetamaskBridge
+    // exposes, but uses ONLY window.ethereum + localStorage — no esm.sh deps.
+    // Installed before the crypto-bridge.js import so MetaMask flows (login,
+    // listing, cancel, buy) keep working when that import fails. If the import
+    // succeeds it overwrites this object with the canonical implementation;
+    // both are equivalent for MetaMask interactions.
+    function installMetamaskBridgeFallback() {
+      if (window.ArcTradingMetamaskBridge?.pollRequest) return;
+
+      const WALLET_SESSION_KEY = 'arc_wallet_session_v1';
+      const pending = new Map();
+      let nextRequestId = 1;
+
+      function startAsync(promise) {
+        const id = String(nextRequestId++);
+        pending.set(id, { resolved: false });
+        Promise.resolve(promise).then(
+          (result) => pending.set(id, {
+            resolved: true,
+            result: typeof result === 'string' ? result : JSON.stringify(result),
+          }),
+          (err) => pending.set(id, { resolved: true, error: String(err?.message ?? err) }),
+        );
+        return id;
+      }
+
+      function poll(id) {
+        const entry = pending.get(id);
+        if (!entry) return { error: 'unknown metamaskBridge request id ' + id };
+        if (!entry.resolved) return { pending: true };
+        pending.delete(id);
+        return entry.error ? { error: entry.error } : { result: entry.result };
+      }
+
+      function ensureEth() {
+        return window.ethereum
+          ? Promise.resolve(window.ethereum)
+          : Promise.reject(new Error('MetaMask not detected. Install the MetaMask extension and reload.'));
+      }
+
+      function readSession() {
+        if (window.__arcWalletSession) return window.__arcWalletSession;
+        try {
+          const raw = localStorage.getItem(WALLET_SESSION_KEY);
+          return raw ? JSON.parse(raw) : null;
+        } catch (_) { return null; }
+      }
+
+      window.ArcTradingMetamaskBridge = {
+        requestAccounts() {
+          return startAsync(ensureEth().then(eth => eth.request({ method: 'eth_requestAccounts' })));
+        },
+        personalSign(message, address) {
+          return startAsync(
+            ensureEth().then(eth => eth.request({ method: 'personal_sign', params: [message, address] })),
+          );
+        },
+        sendTransaction(tx) {
+          return startAsync(
+            ensureEth().then(eth => eth.request({ method: 'eth_sendTransaction', params: [tx] })),
+          );
+        },
+        chainId() {
+          return startAsync(ensureEth().then(eth => eth.request({ method: 'eth_chainId' })));
+        },
+        cacheSession(session) {
+          try {
+            const s = typeof session === 'string' ? JSON.parse(session) : session;
+            if (!s) return;
+            window.__arcWalletSession = s;
+            localStorage.setItem(WALLET_SESSION_KEY, JSON.stringify(s));
+          } catch (_) { /* private mode etc. */ }
+        },
+        getCachedSession() {
+          const s = readSession();
+          return s ? JSON.stringify(s) : '';
+        },
+        clearCachedSession() {
+          window.__arcWalletSession = null;
+          try { localStorage.removeItem(WALLET_SESSION_KEY); } catch (_) {}
+        },
+        pollRequest(id) {
+          return JSON.stringify(poll(id));
+        },
+      };
+      console.log('[ArcTradingMetamaskBridge] installed inline fallback (no esm.sh deps)');
+    }
+
+    // ---- step 2: read runtime config (meta tag + URL hash overrides) ----
+    function readConfig() {
+      const meta = document.querySelector('meta[name="arc-trading-runtime-config"]');
+      let base = {};
+      try { base = JSON.parse(meta?.getAttribute('content') ?? '{}'); }
+      catch (err) { console.warn('[config] meta JSON invalid; using {}', err); }
+
+      const hash = window.location.hash?.startsWith('#') ? window.location.hash.slice(1) : '';
+      const params = new URLSearchParams(hash);
+      for (const [k, v] of params.entries()) {
+        if (v === '') continue;
+        if (k === 'chainId') base[k] = Number(v);
+        else base[k] = v;
+      }
+      return base;
+    }
+    const cfg = readConfig();
+    document.getElementById('chain-id').textContent =
+      cfg.chainId ? `Chain ID ${cfg.chainId}` : 'Chain ID 0 (not enforced)';
+    document.getElementById('chain-label').textContent =
+      cfg.chainId ? `Chain ${cfg.chainId}` : 'No chain';
+    document.getElementById('footer-rpc').textContent = cfg.rpcUrl
+      ? shortenHost(cfg.rpcUrl) : '—';
+    document.getElementById('footer-game').textContent = cfg.gamePaymentAddress
+      ? shortenAddr(cfg.gamePaymentAddress) : '—';
+    if (cfg.rpcUrl) refreshRuntimeChainInfo(cfg.rpcUrl);
+
+    // ---- step 3: wallet connect ----
+    const WALLET_SESSION_KEY = 'arc_wallet_session_v1';
+    const statusBarEl = document.getElementById('status');
+    const addrEl = document.getElementById('address');
+    const addressPill = document.getElementById('address-pill');
+    const addressLabel = document.getElementById('address-label');
+    const btnConnect = document.getElementById('btn-connect');
+    const btnSign = document.getElementById('btn-sign');
+
+    function setStatus(text, kind) {
+      statusBarEl.textContent = text;
+      statusBarEl.className = `status ${kind ?? ''}`.trim();
+    }
+
+    let walletProvider = window.ethereum;
+    let currentAddress = null;
+    const cachedSession = readBrowserWalletSession();
+    if (cachedSession && cachedSession.wallet && new Date(cachedSession.expiresAt) > new Date()) {
+      currentAddress = cachedSession.wallet;
+      addrEl.textContent = currentAddress;
+      addressLabel.textContent = shortenAddr(currentAddress);
+      addressPill.style.display = '';
+      addressPill.classList.add('ok');
+      btnSign.disabled = false;
+      btnConnect.textContent = 'Connected';
+    }
+    if (!walletProvider) {
+      setStatus('No EIP-1193 wallet detected. Install MetaMask, Rabby, or Coinbase Wallet, then refresh.', 'err');
+      btnConnect.disabled = true;
+      btnConnect.textContent = 'Install MetaMask';
+      btnConnect.classList.remove('primary');
+      btnConnect.addEventListener('click', () => window.open('https://metamask.io/download/', '_blank', 'noopener'));
+    } else {
+      setStatus(currentAddress
+        ? 'Wallet session restored. The game will import this session when Unity is ready.'
+        : 'Wallet detected. Click "Connect Wallet" to continue.', currentAddress ? 'ok' : '');
+    }
+    if (walletProvider?.on) {
+      walletProvider.on('accountsChanged', () => clearBrowserWalletSession());
+      walletProvider.on('chainChanged', () => clearBrowserWalletSession());
+    }
+
+    btnConnect.addEventListener('click', async () => {
+      if (!walletProvider) return;
+      btnConnect.disabled = true;
+      setStatus('Requesting wallet connection…', '');
+      try {
+        const accounts = await walletProvider.request({ method: 'eth_requestAccounts' });
+        if (!Array.isArray(accounts) || accounts.length === 0) throw new Error('wallet returned no accounts');
+        currentAddress = accounts[0];
+        addrEl.textContent = currentAddress;
+        addressLabel.textContent = shortenAddr(currentAddress);
+        addressPill.style.display = '';
+        addressPill.classList.add('ok');
+        btnSign.disabled = false;
+        btnConnect.textContent = 'Connected';
+        setStatus('Wallet connected. The game will request a SIWE signature when needed.', 'ok');
+      } catch (err) {
+        console.error(err);
+        setStatus(`Connection failed: ${err?.message ?? err}`, 'err');
+        btnConnect.disabled = false;
+      }
+    });
+
+    btnSign.addEventListener('click', async () => {
+      if (!currentAddress) return;
+      btnSign.disabled = true;
+      setStatus('Awaiting SIWE signature…', '');
+      try {
+        const nonce = (cfg.nonce ?? cryptoRandomNonce());
+        document.getElementById('nonce').textContent = nonce;
+        const issuedAt = new Date().toISOString();
+        const expiresAt = cfg.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const chainId = await resolveWalletChainId();
+        const message =
+          `${cfg.domain ?? location.host} wants you to sign in with your Ethereum account:\n` +
+          `${currentAddress}\n\n` +
+          `${cfg.statement ?? 'Sign in to ArcTrading.'}\n\n` +
+          `URI: ${cfg.uri ?? location.origin}\n` +
+          `Version: 1\n` +
+          `Chain ID: ${chainId}\n` +
+          `Nonce: ${nonce}\n` +
+          `Issued At: ${issuedAt}\n` +
+          `Expiration Time: ${expiresAt}`;
+        const hexMsg = '0x' + Array.from(new TextEncoder().encode(message))
+          .map(b => b.toString(16).padStart(2, '0')).join('');
+        const signature = await walletProvider.request({ method: 'personal_sign', params: [hexMsg, currentAddress] });
+        const session = {
+          schemaVersion: 1,
+          wallet: currentAddress.toLowerCase(),
+          address: currentAddress,
+          chainId,
+          issuedAt,
+          expiresAt,
+          message,
+          signature,
+        };
+        cacheBrowserWalletSession(session);
+        publishWalletSessionToUnity(session);
+        setStatus(`Signed (${shorten(signature)}). Game session signed in.`, 'ok');
+      } catch (err) {
+        console.error(err);
+        setStatus(`Signature cancelled or failed: ${err?.message ?? err}`, 'err');
+        btnSign.disabled = false;
+      }
+    });
+
+    function cryptoRandomNonce() {
+      const b = new Uint8Array(16); crypto.getRandomValues(b);
+      return Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+    }
+    async function resolveWalletChainId() {
+      if (cfg.chainId) return Number(cfg.chainId);
+      try {
+        const chainHex = await walletProvider.request({ method: 'eth_chainId' });
+        return Number.parseInt(chainHex, 16) || 0;
+      } catch (_) {
+        return 0;
+      }
+    }
+    function readBrowserWalletSession() {
+      if (window.__arcWalletSession) return window.__arcWalletSession;
+      try {
+        const raw = localStorage.getItem(WALLET_SESSION_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (_) {
+        return null;
+      }
+    }
+    function cacheBrowserWalletSession(session) {
+      window.__arcWalletSession = session;
+      window.__arcLastSiwe = session;
+      try { localStorage.setItem(WALLET_SESSION_KEY, JSON.stringify(session)); } catch (_) {}
+      try { window.ArcTradingMetamaskBridge?.cacheSession?.(session); } catch (_) {}
+    }
+    function clearBrowserWalletSession() {
+      window.__arcWalletSession = null;
+      window.__arcLastSiwe = null;
+      try { localStorage.removeItem(WALLET_SESSION_KEY); } catch (_) {}
+      try { window.ArcTradingMetamaskBridge?.clearCachedSession?.(); } catch (_) {}
+      currentAddress = null;
+      addrEl.textContent = '-';
+      addressLabel.textContent = '';
+      addressPill.style.display = 'none';
+      addressPill.classList.remove('ok');
+      btnSign.disabled = true;
+      btnConnect.disabled = false;
+      btnConnect.textContent = 'Connect Wallet';
+      btnConnect.classList.add('primary');
+      setStatus('Wallet changed. Connect and sign in again.', '');
+    }
+    function publishWalletSessionToUnity(session = window.__arcWalletSession) {
+      if (!session || !window.unityInstance) return false;
+      try {
+        window.unityInstance.SendMessage('WalletLoginService', 'OnBrowserWalletSessionJson', JSON.stringify(session));
+        return true;
+      } catch (err) {
+        console.warn('[wallet] failed to forward session to Unity', err);
+        return false;
+      }
+    }
+    function shorten(s) { if (!s) return ''; return s.length > 14 ? `${s.slice(0, 8)}...${s.slice(-6)}` : s; }
+    function shortenAddr(s) { if (!s) return ''; return s.length > 12 ? `${s.slice(0, 6)}...${s.slice(-4)}` : s; }
+    function shortenHost(s) { try { return new URL(s).host; } catch (_) { return s; } }
+    function escapeHtml(s) {
+      return String(s ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+    }
+
+    // ---- step 4: leaderboard + price chart (ported from walletlogin/index.html) ----
+    const SERIES_COLORS = ['#66b2ff', '#5cd197', '#ffd166', '#ff7a7a', '#c98aff'];
+    const ITEMS_ABI = [
+      "function getItemIds() view returns (uint256[5])",
+      "function getAllBuyPrices() view returns (uint256[5])",
+      "function getAllSellPrices() view returns (uint256[5])",
+      "function npcTba(uint256 tokenId) view returns (address)",
+      "function getTbaItemBalances(address tba) view returns (uint256[5] ids, uint256[5] balances)"
+    ];
+    const NPC_ABI = [
+      "function nextTokenId() view returns (uint256)",
+      "function ownerOf(uint256 tokenId) view returns (address)",
+      "function getNpc(uint256 tokenId) view returns (tuple(string npcName, string metadataURI, uint8 archetype, uint8 riskLevel, uint16 level, uint32 reputation, tuple(uint16 livingNeedsWeightBps, uint16 reserveWeightBps, uint16 tradingWeightBps, uint64 minimumLivingBudgetUSDC, uint64 minimumReserveBudgetUSDC, uint32 rebalanceIntervalSeconds, uint32 chainActionCooldownSeconds, uint64 minTradeUSDC, uint64 maxTradeUSDC) portfolio))",
+      "function getPaymentBinding(uint256 tokenId) view returns (address wallet, uint64 version)"
+    ];
+    const ERC20_ABI = ["function balanceOf(address account) view returns (uint256)"];
+    const GATEWAY_ABI = ["function totalBalance(address token, address depositor) view returns (uint256)"];
+    const ARCHETYPE_LABEL = ['ConservativeSaver', 'BalancedTrader', 'AggressiveSpeculator'];
+    const MAX_LEADERBOARD_NPCS = 50;
+    const TOP_N = 10;
+    const PRICE_POLL_MS = 15_000;
+    const LEADERBOARD_POLL_MS = 20_000;
+    const PRICE_HISTORY_KEY = 'arctrading.priceHistory.v1';
+    const PRICE_HISTORY_MAX_SAMPLES = 120;
+
+    let chainProvider = null;
+    let chartMode = 'buy';
+    let priceHistory = loadPriceHistory();
+
+    function loadPriceHistory() {
+      try {
+        const raw = localStorage.getItem(PRICE_HISTORY_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.slice(-PRICE_HISTORY_MAX_SAMPLES);
+      } catch (_) { return []; }
+    }
+    function savePriceHistory() {
+      try { localStorage.setItem(PRICE_HISTORY_KEY, JSON.stringify(priceHistory)); }
+      catch (_) { /* quota — drop */ }
+    }
+    function getProvider() {
+      if (!chainProvider) {
+        if (!cfg.rpcUrl) return null;
+        chainProvider = new JsonRpcProvider(cfg.rpcUrl, undefined, { staticNetwork: true });
+      }
+      return chainProvider;
+    }
+
+    async function pollPricesOnce() {
+      const provider = getProvider();
+      if (!provider || !cfg.gamePaymentAddress) {
+        document.getElementById('prices-panel').style.display = 'none';
+        return;
+      }
+      const game = new Contract(cfg.gamePaymentAddress, ITEMS_ABI, provider);
+      let ids, buy, sell;
+      try {
+        [ids, buy, sell] = await Promise.all([
+          game.getItemIds(), game.getAllBuyPrices(), game.getAllSellPrices()
+        ]);
+      } catch (err) {
+        console.error('[prices] poll failed', err);
+        document.getElementById('prices-meta').textContent =
+          `RPC error: ${err?.shortMessage ?? err?.message ?? err}`;
+        return;
+      }
+      const sample = {
+        t: Date.now(),
+        ids: ids.map(x => x.toString()),
+        buy: buy.map(x => Number(formatUnits(x, 6))),
+        sell: sell.map(x => Number(formatUnits(x, 6))),
+      };
+      const last = priceHistory[priceHistory.length - 1];
+      const same = last
+        && JSON.stringify(last.buy) === JSON.stringify(sample.buy)
+        && JSON.stringify(last.sell) === JSON.stringify(sample.sell);
+      if (!same) {
+        priceHistory.push(sample);
+        if (priceHistory.length > PRICE_HISTORY_MAX_SAMPLES)
+          priceHistory.splice(0, priceHistory.length - PRICE_HISTORY_MAX_SAMPLES);
+        savePriceHistory();
+      }
+      renderChart();
+      renderLegend(sample);
+      ensureChartAnimation();
+      const ageSec = same ? Math.round((Date.now() - last.t) / 1000) : 0;
+      document.getElementById('prices-meta').textContent =
+        `${priceHistory.length} sample(s) · last update ${new Date(sample.t).toLocaleTimeString()}`
+        + (same ? ` (unchanged for ${ageSec}s)` : '');
+    }
+
+    function renderChart() {
+      const canvas = document.getElementById('price-chart');
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = canvas.clientWidth || canvas.width;
+      const cssH = canvas.clientHeight || canvas.height;
+      if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
+        canvas.width = Math.round(cssW * dpr);
+        canvas.height = Math.round(cssH * dpr);
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      if (priceHistory.length === 0) {
+        ctx.fillStyle = '#8b91a8';
+        ctx.font = '13px -apple-system, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Waiting for first price sample…', cssW / 2, cssH / 2);
+        return;
+      }
+
+      const padL = 44, padR = 12, padT = 12, padB = 24;
+      const plotW = cssW - padL - padR;
+      const plotH = cssH - padT - padB;
+      const numItems = priceHistory[0][chartMode]?.length ?? 5;
+      let lo = Infinity, hi = -Infinity;
+      for (const s of priceHistory)
+        for (const v of s[chartMode]) { if (v < lo) lo = v; if (v > hi) hi = v; }
+      if (!isFinite(lo) || !isFinite(hi)) return;
+      if (lo === hi) { lo *= 0.95; hi *= 1.05; }
+      const range = hi - lo;
+      const yLo = lo - range * 0.08;
+      const yHi = hi + range * 0.08;
+      const t0 = priceHistory[0].t;
+      const t1 = priceHistory[priceHistory.length - 1].t;
+      const tSpan = Math.max(1, t1 - t0);
+
+      // Animated scan beam — a faint gradient slab sweeping left→right so the
+      // panel reads as "live" even between 15s polls.
+      const now = performance.now();
+      const scanProgress = (now / 4200) % 1;
+      const scanW = Math.min(80, plotW * 0.25);
+      const scanX = padL + plotW * scanProgress;
+      const scanGrad = ctx.createLinearGradient(scanX - scanW, 0, scanX, 0);
+      scanGrad.addColorStop(0, 'rgba(102,178,255,0)');
+      scanGrad.addColorStop(1, 'rgba(102,178,255,0.14)');
+      ctx.fillStyle = scanGrad;
+      ctx.fillRect(Math.max(padL, scanX - scanW), padT, Math.min(scanW, scanX - padL), plotH);
+
+      // Grid + axis labels
+      ctx.strokeStyle = 'rgba(36,41,56,.9)';
+      ctx.fillStyle = '#8b91a8';
+      ctx.font = '10px ui-monospace, Menlo, monospace';
+      ctx.lineWidth = 1;
+      const gridLines = 4;
+      for (let i = 0; i <= gridLines; i++) {
+        const y = padT + (plotH * i / gridLines);
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+        const val = yHi - (yHi - yLo) * i / gridLines;
+        ctx.textAlign = 'right';
+        ctx.fillText(val.toFixed(val < 1 ? 4 : val < 100 ? 3 : 2), padL - 4, y + 3);
+      }
+      ctx.textAlign = 'center';
+      const fmt = ts => {
+        const d = new Date(ts);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      };
+      ctx.fillText(fmt(t0), padL, cssH - 6);
+      ctx.fillText(fmt((t0 + t1) / 2), padL + plotW / 2, cssH - 6);
+      ctx.fillText(fmt(t1), padL + plotW, cssH - 6);
+
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+
+      for (let series = 0; series < numItems; series++) {
+        const color = SERIES_COLORS[series % SERIES_COLORS.length];
+
+        // Project all points up front so we can reuse them for fill + line + dot.
+        const pts = new Array(priceHistory.length);
+        for (let i = 0; i < priceHistory.length; i++) {
+          const s = priceHistory[i];
+          const x = padL + (priceHistory.length === 1 ? plotW : plotW * (s.t - t0) / tSpan);
+          const v = s[chartMode][series];
+          const y = padT + plotH * (1 - (v - yLo) / (yHi - yLo));
+          pts[i] = { x, y };
+        }
+
+        // Gradient fill under the line.
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, padT + plotH);
+        for (const p of pts) ctx.lineTo(p.x, p.y);
+        ctx.lineTo(pts[pts.length - 1].x, padT + plotH);
+        ctx.closePath();
+        const fillGrad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+        fillGrad.addColorStop(0, color + '55');
+        fillGrad.addColorStop(1, color + '00');
+        ctx.fillStyle = fillGrad;
+        ctx.fill();
+
+        // Stroke with soft glow.
+        ctx.beginPath();
+        for (let i = 0; i < pts.length; i++) {
+          if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
+          else ctx.lineTo(pts[i].x, pts[i].y);
+        }
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.75;
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = color;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Pulsing endpoint marker — phase-offset per series so they breathe out of sync.
+        const last = pts[pts.length - 1];
+        const pulse = (Math.sin(now / 420 + series * 0.7) + 1) / 2;
+        const r = 2.6 + pulse * 1.6;
+        ctx.shadowBlur = 6 + pulse * 10;
+        ctx.shadowColor = color;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(last.x, last.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Halo ring around endpoint for an extra "live" beat.
+        ctx.beginPath();
+        ctx.arc(last.x, last.y, r + 3 + pulse * 2, 0, Math.PI * 2);
+        ctx.strokeStyle = color + Math.round(60 * (1 - pulse)).toString(16).padStart(2, '0');
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+
+    // Continuous rAF loop so the scan beam, pulse dots, and halo rings keep
+    // breathing between polls. Throttled to ~30fps to stay friendly on laptops;
+    // rAF is auto-paused by the browser when the tab isn't visible.
+    let chartAnimationStarted = false;
+    let chartLastFrameMs = 0;
+    function chartTick(nowMs) {
+      if (nowMs - chartLastFrameMs >= (1000 / 30)) {
+        chartLastFrameMs = nowMs;
+        renderChart();
+      }
+      requestAnimationFrame(chartTick);
+    }
+    function ensureChartAnimation() {
+      if (chartAnimationStarted) return;
+      chartAnimationStarted = true;
+      requestAnimationFrame(chartTick);
+    }
+
+    function renderLegend(sample) {
+      if (!sample) return;
+      const legendEl = document.getElementById('price-legend');
+      const items = sample[chartMode];
+      legendEl.innerHTML = '';
+      for (let i = 0; i < items.length; i++) {
+        const itemId = sample.ids[i];
+        const color = SERIES_COLORS[i % SERIES_COLORS.length];
+        const span = document.createElement('span');
+        span.innerHTML =
+          `<span class="swatch" style="background:${color}"></span>` +
+          `Item ${itemId}: <span style="color:var(--fg)">${items[i].toFixed(4)}</span>`;
+        legendEl.appendChild(span);
+      }
+    }
+
+    document.querySelectorAll('.chart-controls button.toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        chartMode = btn.dataset.mode;
+        document.querySelectorAll('.chart-controls button.toggle').forEach(b => {
+          b.classList.toggle('active', b.dataset.mode === chartMode);
+        });
+        renderChart();
+        const last = priceHistory[priceHistory.length - 1];
+        if (last) renderLegend(last);
+      });
+    });
+    window.addEventListener('resize', () => renderChart());
+
+    // ---- leaderboard ----
+    let leaderboardInflight = null;
+    function runLeaderboardPoll(reason) {
+      if (leaderboardInflight) return leaderboardInflight;
+      const btn = document.getElementById('btn-leaderboard-refresh');
+      if (btn) btn.classList.add('is-busy');
+      leaderboardInflight = (async () => {
+        try { await pollLeaderboardOnce(); }
+        catch (err) { console.error(`[leaderboard] poll (${reason ?? 'unspecified'}) failed`, err); }
+        finally {
+          leaderboardInflight = null;
+          if (btn) btn.classList.remove('is-busy');
+        }
+      })();
+      return leaderboardInflight;
+    }
+
+    async function pollLeaderboardOnce() {
+      const provider = getProvider();
+      const bodyEl = document.getElementById('leaderboard-body');
+      const metaEl = document.getElementById('leaderboard-meta');
+      if (!provider || !cfg.npcCharacterAddress || !cfg.gamePaymentAddress || !cfg.usdcAddress) {
+        document.getElementById('leaderboard-panel').style.display = 'none';
+        return;
+      }
+      const npc = new Contract(cfg.npcCharacterAddress, NPC_ABI, provider);
+      const game = new Contract(cfg.gamePaymentAddress, ITEMS_ABI, provider);
+      const usdc = new Contract(cfg.usdcAddress, ERC20_ABI, provider);
+      const gateway = cfg.gatewayAddress ? new Contract(cfg.gatewayAddress, GATEWAY_ABI, provider) : null;
+
+      let nextId, sellPrices;
+      try {
+        [nextId, sellPrices] = await Promise.all([npc.nextTokenId(), game.getAllSellPrices()]);
+      } catch (err) {
+        console.error('[leaderboard] init failed', err);
+        bodyEl.innerHTML = `<div class="empty">RPC error: ${err?.shortMessage ?? err?.message ?? err}</div>`;
+        return;
+      }
+      const total = Number(nextId) - 1;
+      if (total <= 0) {
+        bodyEl.innerHTML = `<div class="empty">No NPCs minted yet.</div>`;
+        metaEl.textContent = '0 scanned';
+        return;
+      }
+      const scanCount = Math.min(total, MAX_LEADERBOARD_NPCS);
+      metaEl.textContent = `scanning ${scanCount}/${total}…`;
+      const sellPriceNums = sellPrices.map(x => Number(formatUnits(x, 6)));
+      const rows = [];
+      let scanned = 0;
+      for (let id = 1; id <= scanCount; id++) {
+        scanned++;
+        let owner;
+        try { owner = await npc.ownerOf(id); } catch (_) { continue; }
+        if (!owner || owner === ZeroAddress) continue;
+        let data, tba, binding;
+        try {
+          [data, tba, binding] = await Promise.all([
+            npc.getNpc(id), game.npcTba(id),
+            npc.getPaymentBinding(id).catch(() => null)
+          ]);
+        } catch (err) {
+          console.warn(`[leaderboard] skip tokenId=${id}: ${err?.shortMessage ?? err?.message ?? err}`);
+          continue;
+        }
+        const paymentWallet = binding?.wallet ?? binding?.[0] ?? null;
+        const hasTba = tba && tba !== ZeroAddress;
+        const hasPaymentWallet = paymentWallet && paymentWallet !== ZeroAddress;
+        const [tbaUsdcBal, vault, paymentUsdcBal, gatewayBal] = await Promise.all([
+          hasTba ? usdc.balanceOf(tba).catch(() => 0n) : Promise.resolve(0n),
+          hasTba ? game.getTbaItemBalances(tba).catch(() => null) : Promise.resolve(null),
+          hasPaymentWallet ? usdc.balanceOf(paymentWallet).catch(() => 0n) : Promise.resolve(0n),
+          (gateway && hasPaymentWallet)
+            ? gateway.totalBalance(cfg.usdcAddress, paymentWallet).catch(() => 0n)
+            : Promise.resolve(0n)
+        ]);
+        const tbaUsdcNum = Number(formatUnits(tbaUsdcBal, 6));
+        const paymentUsdcNum = Number(formatUnits(paymentUsdcBal, 6));
+        const gatewayUsdcNum = Number(formatUnits(gatewayBal, 6));
+        const balances = vault?.balances ?? vault?.[1] ?? [0n, 0n, 0n, 0n, 0n];
+        let vaultNum = 0;
+        for (let i = 0; i < balances.length; i++)
+          vaultNum += Number(balances[i]) * (sellPriceNums[i] ?? 0);
+        rows.push({
+          id, name: data.npcName || `NPC #${id}`,
+          archetype: ARCHETYPE_LABEL[data.archetype] ?? `arch-${data.archetype}`,
+          level: Number(data.level ?? 0),
+          owner, tba, paymentWallet,
+          tbaUsdc: tbaUsdcNum, gatewayUsdc: gatewayUsdcNum,
+          paymentUsdc: paymentUsdcNum, vault: vaultNum,
+          total: tbaUsdcNum + gatewayUsdcNum + paymentUsdcNum + vaultNum
+        });
+        if (scanned % 5 === 0) metaEl.textContent = `scanned ${scanned}/${scanCount}…`;
+      }
+      rows.sort((a, b) => b.total - a.total);
+      const top = rows.slice(0, TOP_N);
+      renderLeaderboard(top, { scanned, total, gatewayConfigured: !!gateway });
+    }
+
+    function renderLeaderboard(rows, info) {
+      const bodyEl = document.getElementById('leaderboard-body');
+      const metaEl = document.getElementById('leaderboard-meta');
+      metaEl.textContent =
+        `${rows.length} ranked · ${info.scanned}/${info.total}`
+        + (info.total > MAX_LEADERBOARD_NPCS ? ` (cap ${MAX_LEADERBOARD_NPCS})` : '');
+      if (rows.length === 0) {
+        bodyEl.innerHTML = `<div class="empty">No NPCs found in scan range.</div>`;
+        return;
+      }
+      const fmtUsdc = v => v.toFixed(v >= 100 ? 2 : 4);
+      const html = [
+        '<table class="leaderboard">',
+        '<thead><tr>',
+        '<th class="num">#</th>',
+        '<th>NPC</th>',
+        '<th class="num">TBA</th>',
+        '<th class="num">Vault</th>',
+        '<th class="num">Total</th>',
+        '</tr></thead><tbody>'
+      ];
+      rows.forEach((r, i) => {
+        const rank = i + 1;
+        const subline = `#${r.id} · ${r.archetype} · L${r.level}`;
+        html.push(
+          `<tr class="rank-${rank}">`,
+          `<td class="rank num">${rank}</td>`,
+          `<td><div>${escapeHtml(r.name)}</div>` +
+            `<div style="color:var(--muted);font-size:10px">${escapeHtml(subline)}</div></td>`,
+          `<td class="num">${fmtUsdc(r.tbaUsdc + r.gatewayUsdc + r.paymentUsdc)}</td>`,
+          `<td class="num">${fmtUsdc(r.vault)}</td>`,
+          `<td class="num" style="font-weight:600">${fmtUsdc(r.total)}</td>`,
+          `</tr>`
+        );
+      });
+      html.push('</tbody></table>');
+      bodyEl.innerHTML = html.join('');
+    }
+
+    // ---- step 5: boot dashboards (in parallel with Unity boot) ----
+    //
+    // Two entry paths:
+    //   (a) cfg.rpcUrl is already populated (meta tag, URL hash, or Unity has
+    //       called installArcDashboardConfig before this module ran). Start
+    //       polling immediately.
+    //   (b) cfg.rpcUrl is empty. Show a "waiting for Unity" state in both
+    //       panels and start polling once Unity calls installArcDashboardConfig.
+    //
+    // The polling setIntervals run at most once thanks to dashboardStarted.
+    let dashboardStarted = false;
+
+    function startDashboardPolling() {
+      if (dashboardStarted) return;
+      if (!cfg.rpcUrl) return;
+      dashboardStarted = true;
+
+      // Unhide panels in case an earlier bootDashboard pass hid them.
+      const leaderboardPanel = document.getElementById('leaderboard-panel');
+      const pricesPanel = document.getElementById('prices-panel');
+      if (leaderboardPanel) leaderboardPanel.style.display = '';
+      if (pricesPanel) pricesPanel.style.display = '';
+
+      const lastCached = priceHistory[priceHistory.length - 1];
+      if (lastCached) { renderChart(); renderLegend(lastCached); ensureChartAnimation(); }
+      setFooterStatus('polling chain…');
+      Promise.allSettled([pollPricesOnce(), runLeaderboardPoll('boot')])
+        .then(() => setFooterStatus('idle'));
+      setInterval(pollPricesOnce, PRICE_POLL_MS);
+      setInterval(() => runLeaderboardPoll('interval'), LEADERBOARD_POLL_MS);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') runLeaderboardPoll('visibility');
+      });
+    }
+
+    // Unity calls this via the ArcDashboard_SetConfig jslib extern once it has
+    // resolved chainId and the on-chain addresses from its Inspector wiring.
+    // Idempotent — successive calls merge into cfg and reconfigure dependents.
+    window.installArcDashboardConfig = function (cfgUpdate) {
+      if (!cfgUpdate || typeof cfgUpdate !== 'object') return;
+      Object.assign(cfg, cfgUpdate);
+
+      document.getElementById('footer-rpc').textContent =
+        cfg.rpcUrl ? shortenHost(cfg.rpcUrl) : '—';
+      document.getElementById('footer-game').textContent =
+        cfg.gamePaymentAddress ? shortenAddr(cfg.gamePaymentAddress) : '—';
+      if (cfg.chainId) {
+        document.getElementById('chain-id').textContent = `Chain ID ${cfg.chainId}`;
+        document.getElementById('chain-label').textContent = `Chain ${cfg.chainId}`;
+        document.getElementById('chain-pill').classList.add('ok');
+      }
+      try { window.ArcTradingPublicRpc?.configure?.(cfg.rpcUrl); } catch (_) {}
+      // refreshRuntimeChainInfo also writes cfg.chainId — call after configure
+      // so the chain pill reflects the live RPC, not just whatever Unity sent.
+      if (cfg.rpcUrl) refreshRuntimeChainInfo(cfg.rpcUrl);
+      // Reset the cached ethers provider so getProvider() rebuilds with the
+      // new rpcUrl — leaving the stale instance points polls at the wrong URL.
+      chainProvider = null;
+      startDashboardPolling();
+    };
+
+    // If Unity finished pushing config before this module's <script type="module">
+    // resolved (possible because jslib externs run sync against window), apply
+    // the stashed payload now.
+    if (window.__pendingArcDashboardConfig) {
+      try { window.installArcDashboardConfig(window.__pendingArcDashboardConfig); }
+      catch (err) { console.warn('[bootstrap] pending dashboard config apply failed', err); }
+      delete window.__pendingArcDashboardConfig;
+    }
+
+    (function bootDashboard() {
+      // Render any cached priceHistory immediately — even without a live RPC
+      // the canvas shows the last session's data so the panel isn't blank.
+      const lastCached = priceHistory[priceHistory.length - 1];
+      if (lastCached) { renderChart(); renderLegend(lastCached); ensureChartAnimation(); }
+
+      if (cfg.rpcUrl) {
+        startDashboardPolling();
+        return;
+      }
+      const leaderboardBody = document.getElementById('leaderboard-body');
+      const pricesMeta = document.getElementById('prices-meta');
+      if (leaderboardBody)
+        leaderboardBody.innerHTML = '<div class="empty">Awaiting on-chain config from Unity…</div>';
+      if (pricesMeta) pricesMeta.textContent = 'Awaiting on-chain config from Unity…';
+      setFooterStatus('awaiting config');
+    })();
+
+    document.getElementById('btn-leaderboard-refresh')
+      ?.addEventListener('click', () => {
+        if (dashboardStarted) runLeaderboardPoll('manual');
+      });
+
+    // ---- step 6: boot Unity ----
     const buildUrl = 'Build';
     const loaderUrl = buildUrl + '/{{{ LOADER_FILENAME }}}';
-    const config = {
+    const unityConfig = {
       arguments: [],
       dataUrl: buildUrl + '/{{{ DATA_FILENAME }}}',
       frameworkUrl: buildUrl + '/{{{ FRAMEWORK_FILENAME }}}',
@@ -85,26 +1487,46 @@
       productVersion: '{{{ PRODUCT_VERSION }}}',
       showBanner: undefined,
     };
-
-    const canvas = document.querySelector('#unity-canvas');
-
+    const unityCanvasEl = document.querySelector('#unity-canvas');
     const script = document.createElement('script');
     script.src = loaderUrl;
     script.onload = () => {
-      createUnityInstance(canvas, config, (progress) => {
+      createUnityInstance(unityCanvasEl, unityConfig, (progress) => {
         progressEl.style.width = (100 * progress) + '%';
       }).then((unityInstance) => {
         loadingEl.style.display = 'none';
         window.unityInstance = unityInstance;
+        unityInstanceRef = unityInstance;
+        resizeUnityViewport();
+        publishWalletSessionToUnity();
+        // After Unity is up, install the clipboard bridge that forwards
+        // browser paste events into the focused Unity InputField.
+        installClipboardPasteBridge(unityInstance);
       }).catch((message) => {
-        setStatus(String(message), true);
+        setBootStatus(String(message), true);
         console.error('[bootstrap] createUnityInstance failed', message);
       });
     };
-    script.onerror = () => {
-      setStatus('Failed to load ' + loaderUrl, true);
-    };
+    script.onerror = () => setBootStatus('Failed to load ' + loaderUrl, true);
     document.body.appendChild(script);
+
+    // ---- clipboard paste bridge ----
+    // Ctrl+V / Cmd+V inside Unity InputFields doesn't read the browser
+    // clipboard in WebGL by default. We capture the document-level paste event
+    // and SendMessage the text to a singleton GameObject ("WebGLClipboardBridge"
+    // created at runtime by C#) which inserts it into the focused InputField.
+    function installClipboardPasteBridge(unityInstance) {
+      document.addEventListener('paste', async (e) => {
+        let text = '';
+        if (e.clipboardData) text = e.clipboardData.getData('text');
+        if (!text && navigator.clipboard?.readText) {
+          try { text = await navigator.clipboard.readText(); } catch (_) { return; }
+        }
+        if (!text) return;
+        try { unityInstance.SendMessage('WebGLClipboardBridge', 'OnPasteFromBrowser', text); }
+        catch (err) { console.warn('[clipboard] SendMessage failed', err); }
+      }, true);
+    }
   </script>
 </body>
 </html>

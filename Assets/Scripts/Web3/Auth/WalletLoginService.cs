@@ -1,6 +1,8 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ArcTrading.Crypto;
@@ -44,6 +46,58 @@ namespace ArcTrading.Auth
 
         public event Action<WalletSession> OnLoginSucceeded;
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [DllImport("__Internal")] private static extern void ArcDashboard_SetConfig(string json);
+#endif
+
+        [Serializable]
+        private class DashboardConfigDto
+        {
+            public long chainId;
+            public string rpcUrl;
+            public string gamePaymentAddress;
+            public string npcCharacterAddress;
+            public string usdcAddress;
+            public string gatewayAddress;
+        }
+
+        private bool dashboardConfigPushed;
+
+        private void PushDashboardConfigToBrowser()
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            if (dashboardConfigPushed) return;
+            var contract = npcContract != null ? npcContract : FindObjectOfType<NpcCharacterContractClient>();
+            var dto = new DashboardConfigDto
+            {
+                chainId = cachedChainId,
+                rpcUrl = contract != null ? contract.RpcUrl ?? string.Empty : string.Empty,
+                gamePaymentAddress = gamePaymentAddress ?? string.Empty,
+                npcCharacterAddress = contract != null ? contract.NftContractAddress ?? string.Empty : string.Empty,
+                usdcAddress = usdcAddress ?? string.Empty,
+                gatewayAddress = gatewayAddress ?? string.Empty,
+            };
+            // Skip the push when there's nothing actionable on the JS side —
+            // the dashboard will keep its "waiting" UI rather than flicker
+            // into an empty configured state.
+            if (string.IsNullOrEmpty(dto.rpcUrl))
+            {
+                Debug.LogWarning("[WalletLoginService] dashboard config not pushed: rpcUrl missing (NpcCharacterContractClient not wired yet)");
+                return;
+            }
+            try
+            {
+                ArcDashboard_SetConfig(JsonUtility.ToJson(dto));
+                dashboardConfigPushed = true;
+                Debug.Log($"[WalletLoginService] pushed dashboard config to browser (chainId={dto.chainId})");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[WalletLoginService] ArcDashboard_SetConfig failed: {ex.Message}");
+            }
+#endif
+        }
+
         private long cachedChainId;
         private bool chainIdConfigured = false;
         private WalletLoginServer activeServer;
@@ -73,6 +127,11 @@ namespace ArcTrading.Auth
                     Debug.Log($"[WalletLoginService] Start: chainId = {chainId}");
                     ConfigureChainId(chainId);
                 }
+
+                // Hand the WebGL template the on-chain addresses it needs to
+                // render the dashboard panels (NPC leaderboard + price chart).
+                // No-op outside WebGL.
+                PushDashboardConfigToBrowser();
 
                 Debug.Log("[WalletLoginService] Start: awaiting EnsureLoggedInAsync");
                 await EnsureLoggedInAsync(
@@ -132,6 +191,15 @@ namespace ArcTrading.Auth
                 Debug.Log($"[WalletLoginService] restored session for {restoredWebgl.wallet}");
                 OnLoginSucceeded?.Invoke(restoredWebgl);
                 return restoredWebgl;
+            }
+
+            var cachedBrowserSession = WebGLMetamaskBridge.GetCachedSessionJson();
+            if (!string.IsNullOrEmpty(cachedBrowserSession))
+            {
+                if (TryImportBrowserSessionJson(cachedBrowserSession, "webgl bridge cache", out var importedSession))
+                    return importedSession;
+
+                WebGLMetamaskBridge.ClearCachedSession();
             }
 
             if (inflight != null) { Debug.Log("[WalletLoginService] EnsureLoggedInAsync(WebGL): joining inflight"); return await inflight.Task.ConfigureAwait(true); }
@@ -295,6 +363,19 @@ namespace ArcTrading.Auth
         }
 
         /// <summary>
+        /// Called from the WebGL HTML template after its header Sign In button
+        /// obtains a SIWE signature. This makes the page-level login and the
+        /// in-game login converge on the same WalletSession.
+        /// </summary>
+        public void OnBrowserWalletSessionJson(string json)
+        {
+            if (TryImportBrowserSessionJson(json, "webgl template", out var session))
+                Debug.Log($"[WalletLoginService] imported browser SIWE session for {session.wallet}");
+            else
+                Debug.LogWarning("[WalletLoginService] ignored browser SIWE session payload.");
+        }
+
+        /// <summary>
         /// Submit an unsigned tx through the active bridge. Requires that
         /// EnsureLoggedInAsync was previously called with persistentBridge=true and
         /// the browser tab is still open.
@@ -382,6 +463,106 @@ namespace ArcTrading.Auth
             var sb = new StringBuilder(bytes * 2);
             foreach (var b in buf) sb.Append(b.ToString("x2"));
             return sb.ToString();
+        }
+
+        [Serializable]
+        private class BrowserWalletSessionDto
+        {
+            public int schemaVersion;
+            public string wallet;
+            public string address;
+            public long chainId;
+            public string issuedAt;
+            public string expiresAt;
+            public string message;
+            public string signature;
+        }
+
+        private bool TryImportBrowserSessionJson(string json, string source, out WalletSession session)
+        {
+            session = null;
+            if (string.IsNullOrWhiteSpace(json)) return false;
+
+            try
+            {
+                var dto = JsonUtility.FromJson<BrowserWalletSessionDto>(json);
+                if (dto == null) return false;
+
+                var wallet = !string.IsNullOrWhiteSpace(dto.wallet) ? dto.wallet : dto.address;
+                if (string.IsNullOrWhiteSpace(wallet)
+                    || string.IsNullOrWhiteSpace(dto.message)
+                    || string.IsNullOrWhiteSpace(dto.signature)
+                    || string.IsNullOrWhiteSpace(dto.expiresAt))
+                {
+                    Debug.LogWarning($"[WalletLoginService] {source} session missing required fields.");
+                    return false;
+                }
+
+                if (!DateTimeOffset.TryParse(dto.expiresAt, out var expiresAt) || expiresAt <= DateTimeOffset.UtcNow)
+                {
+                    Debug.LogWarning($"[WalletLoginService] {source} session is expired or has an invalid expiresAt.");
+                    return false;
+                }
+
+                var nonce = MatchField(dto.message, @"^Nonce:\s*(\S+)\s*$");
+                if (string.IsNullOrEmpty(nonce))
+                {
+                    Debug.LogWarning($"[WalletLoginService] {source} session SIWE message has no nonce.");
+                    return false;
+                }
+
+                var chainId = dto.chainId > 0 ? dto.chainId : ParseChainIdFromMessage(dto.message);
+                var verify = SiweMessage.Verify(dto.message, dto.signature, nonce, 0);
+                if (!verify.Ok)
+                {
+                    Debug.LogWarning($"[WalletLoginService] {source} SIWE verification failed: {verify.Reason}");
+                    return false;
+                }
+
+                if (!string.Equals(verify.WalletLower, wallet, StringComparison.OrdinalIgnoreCase))
+                {
+                    Debug.LogWarning(
+                        $"[WalletLoginService] {source} wallet mismatch: payload={wallet.ToLowerInvariant()}, signed={verify.WalletLower}");
+                    return false;
+                }
+
+                session = new WalletSession
+                {
+                    wallet = verify.WalletLower,
+                    chainId = chainId,
+                    issuedAt = string.IsNullOrWhiteSpace(dto.issuedAt)
+                        ? DateTimeOffset.UtcNow.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+                        : dto.issuedAt,
+                    expiresAt = dto.expiresAt,
+                    message = dto.message,
+                    signature = dto.signature,
+                };
+                session.Save();
+                Current = session;
+                if (!chainIdConfigured && chainId > 0) ConfigureChainId(chainId);
+
+                OnLoginSucceeded?.Invoke(session);
+                inflight?.TrySetResult(session);
+                Debug.Log($"[WalletLoginService] accepted {source} SIWE session for {session.wallet}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[WalletLoginService] failed to import {source} session: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static long ParseChainIdFromMessage(string message)
+        {
+            var chain = MatchField(message, @"^Chain ID:\s*(\d+)\s*$");
+            return long.TryParse(chain, out var parsed) ? parsed : 0;
+        }
+
+        private static string MatchField(string text, string pattern)
+        {
+            var m = Regex.Match(text ?? string.Empty, pattern, RegexOptions.Multiline);
+            return m.Success ? m.Groups[1].Value : null;
         }
     }
 }

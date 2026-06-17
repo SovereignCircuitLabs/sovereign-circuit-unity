@@ -18,7 +18,9 @@ namespace ArcTrading.Crypto
             {
                 if (current != null) return current;
 #if UNITY_WEBGL && !UNITY_EDITOR
-                current = new WebGLCryptoBackend();
+                current = new FallbackEthCryptoBackend(
+                    new WebGLCryptoBackend(),
+                    new NethereumCryptoBackend());
 #else
                 current = new NethereumCryptoBackend();
 #endif

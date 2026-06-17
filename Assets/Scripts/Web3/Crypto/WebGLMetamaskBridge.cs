@@ -23,12 +23,16 @@ namespace ArcTrading.Crypto
         [DllImport("__Internal")] private static extern string ArcMm_PersonalSign(string message, string address);
         [DllImport("__Internal")] private static extern string ArcMm_SendTransaction(string txJson);
         [DllImport("__Internal")] private static extern string ArcMm_ChainId();
+        [DllImport("__Internal")] private static extern string ArcMm_GetCachedSession();
+        [DllImport("__Internal")] private static extern void ArcMm_ClearCachedSession();
         [DllImport("__Internal")] private static extern string ArcMm_PollRequest(string id);
 #else
         private static string ArcMm_RequestAccounts() => throw new PlatformNotSupportedException("WebGL-only");
         private static string ArcMm_PersonalSign(string _, string __) => throw new PlatformNotSupportedException("WebGL-only");
         private static string ArcMm_SendTransaction(string _) => throw new PlatformNotSupportedException("WebGL-only");
         private static string ArcMm_ChainId() => throw new PlatformNotSupportedException("WebGL-only");
+        private static string ArcMm_GetCachedSession() => throw new PlatformNotSupportedException("WebGL-only");
+        private static void ArcMm_ClearCachedSession() => throw new PlatformNotSupportedException("WebGL-only");
         private static string ArcMm_PollRequest(string _) => throw new PlatformNotSupportedException("WebGL-only");
 #endif
 
@@ -71,6 +75,16 @@ namespace ArcTrading.Crypto
             if (string.IsNullOrEmpty(hex)) return 0;
             var clean = hex.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? hex.Substring(2) : hex;
             return Convert.ToInt64(clean, 16);
+        }
+
+        public static string GetCachedSessionJson()
+        {
+            return ArcMm_GetCachedSession();
+        }
+
+        public static void ClearCachedSession()
+        {
+            ArcMm_ClearCachedSession();
         }
 
         private static string ExtractFirstAddress(string jsonArray)

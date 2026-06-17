@@ -414,7 +414,10 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
                 return;
             }
 
-            GUIUtility.systemCopyBuffer = signer.Value.PrivateKey;
+            // WebGL needs an explicit bridge to reach navigator.clipboard;
+            // WebGLClipboardBridge.WriteText also sets GUIUtility.systemCopyBuffer
+            // so Desktop / Editor behavior is unchanged.
+            ArcTrading.WebGL.WebGLClipboardBridge.WriteText(signer.Value.PrivateKey);
             Debug.Log($"[CopyPaymentWalletPk] Copied PK for {npc.name} tokenId={signer.Value.TokenId} " +
                       $"addr={signer.Value.Address} to clipboard.");
         }

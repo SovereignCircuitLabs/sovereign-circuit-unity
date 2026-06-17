@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Nethereum.Hex.HexTypes;
 using Nethereum.Web3;
 using Nethereum.Web3.Accounts;
+using UnityEngine;
 
 // nanopayments - buyer/client
 namespace ArcTrading.Nanopayment
@@ -180,7 +181,10 @@ namespace ArcTrading.Nanopayment
         public async Task<BigInteger> GatewayAvailableBalanceAsync(string tokenAddress, string depositor)
         {
 #if UNITY_WEBGL && !UNITY_EDITOR
-            return await ArcTrading.WebGL.WebGLChainApi.GetGatewayAvailableBalanceAsync(tokenAddress, depositor);
+            Debug.Log($"[ArcNanopaymentGatewayWallet.GatewayAvailableBalanceAsync] WEBGL token={tokenAddress} depositor={depositor}");
+            var result = await ArcTrading.WebGL.WebGLChainApi.GetGatewayAvailableBalanceAsync(tokenAddress, depositor);
+            Debug.Log($"[ArcNanopaymentGatewayWallet.GatewayAvailableBalanceAsync] WEBGL -> {result}");
+            return result;
 #else
             var contract = gatewayReadOnlyWeb3.Eth.GetContract(GatewayWalletAbi, gatewayContractAddress);
             var fn = contract.GetFunction("availableBalance");

@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
+using UnityEngine;
 
 namespace ArcTrading.WebGL
 {
@@ -101,12 +102,22 @@ namespace ArcTrading.WebGL
             public string[] balances;
         }
 
-        // /tba/:address/items[/balances] uses an inner items object:
-        //   { tba, items: await gamePaymentService.getTbaItemBalances(tba) }
+        // /tba/:address/items[/balances] returns an array of per-item entries:
+        //   { tba, items: [ {id, balance}, {id, balance}, ... ] }
+        // The earlier "{ tba, items: { ids:[...], balances:[...] } }" comment
+        // was wrong (presumably from before the server flattened the viem-
+        // decoded tuple into a list of objects). We keep TbaItems around for
+        // downstream callers that expect parallel string[] ids / balances —
+        // GetTbaItemBalancesAsync reshapes the entry array into it.
         [Serializable] public class TbaItemsResponse
         {
             public string tba;
-            public TbaItems items;
+            public TbaItemEntry[] items;
+        }
+        [Serializable] public class TbaItemEntry
+        {
+            public string id;
+            public string balance;
         }
         [Serializable] public class TbaItems
         {
@@ -167,14 +178,23 @@ namespace ArcTrading.WebGL
         [Serializable] public class NpcBalanceResponse { public string owner; public string balance; }
         [Serializable] public class NpcNextTokenIdResponse { public string nextTokenId; }
 
+        // Server is inconsistent about field names — /game-payment-gateway/...
+        // uses the *Balance suffix (see GamePaymentGatewayResponse) while early
+        // /gateway/{token}/{depositor}/balances builds used the short names.
+        // Declare both so JsonUtility picks up whichever shows up; accessors
+        // below coalesce.
         [Serializable] public class GatewayBalancesResponse
         {
             public string token;
             public string depositor;
             public string total;
+            public string totalBalance;
             public string available;
+            public string availableBalance;
             public string withdrawing;
+            public string withdrawingBalance;
             public string withdrawable;
+            public string withdrawableBalance;
         }
 
         [Serializable] public class GatewayDelayResponse { public string withdrawalDelay; }
@@ -314,8 +334,25 @@ namespace ArcTrading.WebGL
 
         public static async Task<ItemPriceEntry[]> GetAllItemPricesAsync(CancellationToken ct = default)
         {
+            Debug.Log("[WebGLChainApi.GetAllItemPricesAsync] GET /game/items/prices");
             var dto = await ArcTradingApiClient.GetJsonAsync<GameItemPricesResponse>("/game/items/prices", ct).ConfigureAwait(true);
-            return dto?.items ?? Array.Empty<ItemPriceEntry>();
+            if (dto == null)
+            {
+                Debug.LogWarning("[WebGLChainApi.GetAllItemPricesAsync] dto = null (empty/invalid body)");
+                return Array.Empty<ItemPriceEntry>();
+            }
+            if (dto.items == null)
+            {
+                Debug.LogWarning("[WebGLChainApi.GetAllItemPricesAsync] dto.items = null — server JSON shape mismatch with GameItemPricesResponse?");
+                return Array.Empty<ItemPriceEntry>();
+            }
+            Debug.Log($"[WebGLChainApi.GetAllItemPricesAsync] items.Length={dto.items.Length}");
+            for (int i = 0; i < dto.items.Length; i++)
+            {
+                var e = dto.items[i];
+                Debug.Log($"  [{i}] id={e?.id} buyPrice={e?.buyPrice} sellPrice={e?.sellPrice} circulating={e?.circulatingSupply}");
+            }
+            return dto.items;
         }
 
         public static async Task<BigInteger[]> GetAllBuyPricesRawAsync(CancellationToken ct = default)
@@ -328,9 +365,11 @@ namespace ArcTrading.WebGL
 
         public static async Task<BigInteger[]> GetAllSellPricesRawAsync(CancellationToken ct = default)
         {
+            Debug.Log("[WebGLChainApi.GetAllSellPricesRawAsync] start");
             var entries = await GetAllItemPricesAsync(ct).ConfigureAwait(true);
             var arr = new BigInteger[entries.Length];
             for (int i = 0; i < entries.Length; i++) arr[i] = ParseBig(entries[i].sellPrice);
+            Debug.Log($"[WebGLChainApi.GetAllSellPricesRawAsync] parsed {arr.Length} sell prices: [{string.Join(",", arr)}]");
             return arr;
         }
 
@@ -396,16 +435,56 @@ namespace ArcTrading.WebGL
 
         public static async Task<TbaItems> GetTbaItemBalancesAsync(string tba, CancellationToken ct = default)
         {
-            if (string.IsNullOrWhiteSpace(tba)) return new TbaItems { ids = Array.Empty<string>(), balances = Array.Empty<string>() };
-            var dto = await ArcTradingApiClient.GetJsonAsync<TbaItemsResponse>($"/tba/{tba}/items/balances", ct).ConfigureAwait(true);
-            return dto?.items ?? new TbaItems { ids = Array.Empty<string>(), balances = Array.Empty<string>() };
+            Debug.Log($"[WebGLChainApi.GetTbaItemBalancesAsync] tba={tba ?? "<null>"}");
+            if (string.IsNullOrWhiteSpace(tba))
+            {
+                Debug.LogWarning("[WebGLChainApi.GetTbaItemBalancesAsync] tba is null/empty -> returning empty TbaItems");
+                return new TbaItems { ids = Array.Empty<string>(), balances = Array.Empty<string>() };
+            }
+
+            var dto = await ArcTradingApiClient.GetJsonAsync<TbaItemsResponse>(
+                $"/tba/{tba}/items/balances", ct).ConfigureAwait(true);
+            return ReshapeTbaItems(tba, "balances", dto);
         }
 
         public static async Task<TbaItems> GetTbaOwnedItemsAsync(string tba, CancellationToken ct = default)
         {
+            Debug.Log($"[WebGLChainApi.GetTbaOwnedItemsAsync] tba={tba ?? "<null>"}");
             if (string.IsNullOrWhiteSpace(tba)) return new TbaItems { ids = Array.Empty<string>(), balances = Array.Empty<string>() };
-            var dto = await ArcTradingApiClient.GetJsonAsync<TbaItemsResponse>($"/tba/{tba}/items", ct).ConfigureAwait(true);
-            return dto?.items ?? new TbaItems { ids = Array.Empty<string>(), balances = Array.Empty<string>() };
+            var dto = await ArcTradingApiClient.GetJsonAsync<TbaItemsResponse>(
+                $"/tba/{tba}/items", ct).ConfigureAwait(true);
+            return ReshapeTbaItems(tba, "items", dto);
+        }
+
+        // Server sends both /tba/{tba}/items and /tba/{tba}/items/balances as
+        //   { tba, items: [ {id, balance}, ... ] }
+        // Downstream callers expect parallel string[] ids / balances arrays, so
+        // we walk the entry list once and split it into those two arrays.
+        private static TbaItems ReshapeTbaItems(string tba, string endpoint, TbaItemsResponse dto)
+        {
+            if (dto == null)
+            {
+                Debug.LogWarning($"[WebGLChainApi.GetTba{endpoint}Async] dto=null for tba={tba} (empty/invalid response)");
+                return new TbaItems { ids = Array.Empty<string>(), balances = Array.Empty<string>() };
+            }
+            if (dto.items == null)
+            {
+                Debug.LogWarning($"[WebGLChainApi.GetTba{endpoint}Async] dto.items=null for tba={tba}");
+                return new TbaItems { ids = Array.Empty<string>(), balances = Array.Empty<string>() };
+            }
+
+            var n = dto.items.Length;
+            var ids = new string[n];
+            var balances = new string[n];
+            for (int i = 0; i < n; i++)
+            {
+                ids[i] = dto.items[i]?.id ?? "0";
+                balances[i] = dto.items[i]?.balance ?? "0";
+            }
+            Debug.Log(
+                $"[WebGLChainApi.GetTba{endpoint}Async] tba={tba} entries={n} " +
+                $"ids=[{string.Join(",", ids)}] balances=[{string.Join(",", balances)}]");
+            return new TbaItems { ids = ids, balances = balances };
         }
 
         public static async Task<NpcTbaItemsResponse> GetNpcTbaItemBalancesAsync(BigInteger tokenId, CancellationToken ct = default)
@@ -473,21 +552,57 @@ namespace ArcTrading.WebGL
         public static async Task<GatewayBalancesResponse> GetGatewayBalancesAsync(
             string token, string depositor, CancellationToken ct = default)
         {
-            return await ArcTradingApiClient.GetJsonAsync<GatewayBalancesResponse>(
-                $"/gateway/{token}/{depositor}/balances", ct).ConfigureAwait(true);
+            var path = $"/gateway/{token}/{depositor}/balances";
+            Debug.Log($"[WebGLChainApi.GetGatewayBalancesAsync] GET {path}");
+            var raw = await ArcTradingApiClient.GetAsync(path, ct).ConfigureAwait(true);
+            Debug.Log($"[WebGLChainApi.GetGatewayBalancesAsync] raw json:\n{raw}");
+            if (string.IsNullOrEmpty(raw))
+            {
+                Debug.LogWarning($"[WebGLChainApi.GetGatewayBalancesAsync] empty body for token={token} depositor={depositor}");
+                return null;
+            }
+            var dto = JsonUtility.FromJson<GatewayBalancesResponse>(raw);
+            if (dto == null)
+            {
+                Debug.LogWarning($"[WebGLChainApi.GetGatewayBalancesAsync] dto=null for token={token} depositor={depositor}");
+                return null;
+            }
+            Debug.Log(
+                $"[WebGLChainApi.GetGatewayBalancesAsync] token={dto.token} depositor={dto.depositor} " +
+                $"total={dto.total ?? dto.totalBalance} available={dto.available ?? dto.availableBalance} " +
+                $"withdrawing={dto.withdrawing ?? dto.withdrawingBalance} withdrawable={dto.withdrawable ?? dto.withdrawableBalance}");
+            return dto;
         }
 
         public static async Task<BigInteger> GetGatewayTotalBalanceAsync(string token, string depositor, CancellationToken ct = default)
-            => ParseBig((await GetGatewayBalancesAsync(token, depositor, ct).ConfigureAwait(true))?.total);
+        {
+            var dto = await GetGatewayBalancesAsync(token, depositor, ct).ConfigureAwait(true);
+            var raw = dto?.total ?? dto?.totalBalance;
+            var parsed = ParseBig(raw);
+            Debug.Log($"[WebGLChainApi.GetGatewayTotalBalanceAsync] raw=\"{raw ?? "<null>"}\" parsed={parsed}");
+            return parsed;
+        }
 
         public static async Task<BigInteger> GetGatewayAvailableBalanceAsync(string token, string depositor, CancellationToken ct = default)
-            => ParseBig((await GetGatewayBalancesAsync(token, depositor, ct).ConfigureAwait(true))?.available);
+        {
+            var dto = await GetGatewayBalancesAsync(token, depositor, ct).ConfigureAwait(true);
+            var raw = dto?.available ?? dto?.availableBalance;
+            var parsed = ParseBig(raw);
+            Debug.Log($"[WebGLChainApi.GetGatewayAvailableBalanceAsync] token={token} depositor={depositor} raw=\"{raw ?? "<null>"}\" parsed={parsed}");
+            return parsed;
+        }
 
         public static async Task<BigInteger> GetGatewayWithdrawingBalanceAsync(string token, string depositor, CancellationToken ct = default)
-            => ParseBig((await GetGatewayBalancesAsync(token, depositor, ct).ConfigureAwait(true))?.withdrawing);
+        {
+            var dto = await GetGatewayBalancesAsync(token, depositor, ct).ConfigureAwait(true);
+            return ParseBig(dto?.withdrawing ?? dto?.withdrawingBalance);
+        }
 
         public static async Task<BigInteger> GetGatewayWithdrawableBalanceAsync(string token, string depositor, CancellationToken ct = default)
-            => ParseBig((await GetGatewayBalancesAsync(token, depositor, ct).ConfigureAwait(true))?.withdrawable);
+        {
+            var dto = await GetGatewayBalancesAsync(token, depositor, ct).ConfigureAwait(true);
+            return ParseBig(dto?.withdrawable ?? dto?.withdrawableBalance);
+        }
 
         public static async Task<BigInteger> GetGatewayWithdrawalDelayAsync(CancellationToken ct = default)
         {

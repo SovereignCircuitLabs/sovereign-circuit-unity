@@ -54,7 +54,6 @@ namespace ArcTrading.WebGL
             public string maxPriceAllowed;
         }
         [Serializable] private class MintRandomBody { public string maxPriceAllowed; }
-        [Serializable] private class MintRandomX402Body { public string to; }
 
         [Serializable] private class UsdcApproveBody { public string spender; public string amount; }
         [Serializable] private class UsdcTransferBody { public string to; public string amount; }
@@ -131,15 +130,14 @@ namespace ArcTrading.WebGL
         {
             throw SignedRawTxRequired("mintRandom");
         }
-
-        // TODO: x402 payment not right! Need client-server handshakes implementation.
-        public static Task<string> MintRandomX402Async(string to, CancellationToken ct = default)
-        {
-            RequireToken();
-            if (string.IsNullOrWhiteSpace(to)) throw new ArgumentException("to address required", nameof(to));
-            var body = JsonUtility.ToJson(new MintRandomX402Body { to = to });
-            return PostAndResolveAsync("/game/mint-random-x402", body, "mintRandomX402", ct);
-        }
+        
+        // public static Task<string> MintRandomX402Async(string to, CancellationToken ct = default)
+        // {
+        //     throw new NotSupportedException(
+        //         "mintRandomX402 must go through the x402 client-server handshake. " +
+        //         "Call ArcNanopaymentClient.FetchPaywalledResourceAsync(x402ServerBaseUrl + itemId, ...) " +
+        //         "instead — that path signs EIP-3009 locally via IEthCryptoBackend and matches Desktop.");
+        // }
 
         // ============================================================
         //  Phase 2.5: NPC-perspective aggregate writes

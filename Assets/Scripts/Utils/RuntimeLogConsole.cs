@@ -49,15 +49,17 @@ public class RuntimeLogConsole : MonoBehaviour
 
     private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        if (scene.name != "MainScene")
-            return;
-
-        if (FindObjectOfType<RuntimeLogConsole>() != null)
-            return;
-
-        GameObject root = new GameObject("Runtime Log Console");
-        DontDestroyOnLoad(root);
-        root.AddComponent<RuntimeLogConsole>();
+        return;
+        
+        // if (scene.name != "MainScene")
+        //     return;
+        //
+        // if (FindObjectOfType<RuntimeLogConsole>() != null)
+        //     return;
+        //
+        // GameObject root = new GameObject("Runtime Log Console");
+        // DontDestroyOnLoad(root);
+        // root.AddComponent<RuntimeLogConsole>();
     }
 
     private void Awake()
@@ -307,7 +309,10 @@ public class RuntimeLogConsole : MonoBehaviour
             builder.AppendLine(entry.Message);
         }
 
-        GUIUtility.systemCopyBuffer = builder.ToString();
+        // WebGL needs an explicit bridge to reach navigator.clipboard;
+        // WebGLClipboardBridge.WriteText also sets GUIUtility.systemCopyBuffer
+        // so Desktop / Editor behavior is unchanged.
+        ArcTrading.WebGL.WebGLClipboardBridge.WriteText(builder.ToString());
 
         if (copyButtonText != null)
         {
