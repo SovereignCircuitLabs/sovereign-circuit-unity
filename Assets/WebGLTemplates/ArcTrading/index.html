@@ -1878,14 +1878,17 @@
         return;
       }
       const fmtUsdc = v => v.toFixed(v >= 100 ? 2 : 4);
+      const walletTip = 'Liquid USDC the NPC can spend right now: paymentWallet EOA balance + NPC TBA balance (where x402-minted loot lands) + Circle Gateway Wallet deposit funding x402 nanopayments.';
+      const vaultTip = "NPC inventory valued at the GamePayment contract's buyback price (Σ TBA item balances × getAllSellPrices). Not liquid until sold back.";
+      const totalTip = 'Wallet + Vault, in USDC. Used to rank NPCs on this board.';
       const html = [
         '<table class="leaderboard">',
         '<thead><tr>',
         '<th class="num">#</th>',
         '<th>NPC</th>',
-        '<th class="num">TBA</th>',
-        '<th class="num">Vault</th>',
-        '<th class="num">Total</th>',
+        `<th class="num" title="${walletTip}">Wallet</th>`,
+        `<th class="num" title="${vaultTip}">Vault</th>`,
+        `<th class="num" title="${totalTip}">Total</th>`,
         '</tr></thead><tbody>'
       ];
       rows.forEach((r, i) => {
@@ -1916,7 +1919,7 @@
             `</div>` +
             `<div style="color:var(--muted);font-size:10px">${escapeHtml(subline)}</div>` +
           `</td>`,
-          `<td class="num">${fmtUsdc(r.tbaUsdc + r.gatewayUsdc + r.paymentUsdc)}</td>`,
+          `<td class="num" title="paymentWallet ${fmtUsdc(r.paymentUsdc)} + TBA ${fmtUsdc(r.tbaUsdc)} + Gateway ${fmtUsdc(r.gatewayUsdc)}">${fmtUsdc(r.tbaUsdc + r.gatewayUsdc + r.paymentUsdc)}</td>`,
           `<td class="num">${fmtUsdc(r.vault)}</td>`,
           `<td class="num" style="font-weight:600">${fmtUsdc(r.total)}</td>`,
           `</tr>`
