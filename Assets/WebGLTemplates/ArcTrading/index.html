@@ -47,17 +47,28 @@
       --side-w: 340px;
       --gutter: 10px;
     }
-    html, body { height: 100%; }
+    html { height: 100%; }
     body {
       margin: 0; padding: 0;
+      min-height: 100%;
       background:
         radial-gradient(ellipse 80% 50% at 20% 0%, rgba(102, 178, 255, 0.06), transparent 60%),
         radial-gradient(ellipse 60% 50% at 80% 100%, rgba(102, 178, 255, 0.04), transparent 60%),
         var(--bg);
       color: var(--fg);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      overflow: hidden;
+      /* The web runtime console panel lives below #app-shell, so the page
+         needs to scroll vertically. #app-shell still claims a full viewport
+         so the game / dashboards stay at full-screen size on first paint. */
+      overflow-x: hidden;
+      overflow-y: auto;
     }
+    body::-webkit-scrollbar { width: 10px; }
+    body::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,.14); border-radius: 5px;
+    }
+    body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.22); }
+    body::-webkit-scrollbar-track { background: transparent; }
 
     /* ---- shell grid ---- */
     #app-shell {
@@ -300,6 +311,150 @@
       opacity: .92;
       padding: 0 16px;
     }
+
+    /* ---- wallet session "signed in" indicator + sign-out action ---- */
+    .session-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .session-state .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--muted);
+    }
+    .session-state.is-signed-in {
+      color: var(--ok);
+      border-color: rgba(92, 209, 151, .45);
+      background: rgba(92, 209, 151, .08);
+    }
+    .session-state.is-signed-in .dot {
+      background: var(--ok);
+      box-shadow: 0 0 6px var(--ok);
+      animation: notice-pulse 1.8s ease-in-out infinite;
+    }
+
+    /* Header pills/buttons take a visible "is locked" treatment when the
+       cached session has already proven the wallet — opacity + crossed
+       cursor — so the user reads them as "not actionable right now". */
+    .header-right button:disabled,
+    .header-right button.is-locked {
+      opacity: .55;
+      cursor: not-allowed;
+    }
+    .header-right button.is-locked.primary {
+      background: rgba(92, 209, 151, .18);
+      border-color: rgba(92, 209, 151, .45);
+      color: var(--ok);
+      box-shadow: none;
+    }
+
+    /* Sign-out button inside the Wallet Session panel. */
+    #btn-signout {
+      margin-top: 12px;
+      width: 100%;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      background: rgba(255, 122, 122, .06);
+      border: 1px solid rgba(255, 122, 122, .35);
+      color: var(--err);
+      cursor: pointer;
+      transition: background .15s, border-color .15s, box-shadow .15s;
+    }
+    #btn-signout:hover {
+      background: rgba(255, 122, 122, .16);
+      border-color: rgba(255, 122, 122, .6);
+      box-shadow: 0 0 14px rgba(255, 122, 122, .18);
+    }
+
+    /* ---- web runtime console (mirrors Unity RuntimeLogConsole) ---- */
+    #page-log-console {
+      margin: 0 var(--gutter) var(--gutter) var(--gutter);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px 16px 16px;
+      box-sizing: border-box;
+    }
+    #page-log-console .page-log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+    #page-log-console h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      display: flex; align-items: baseline; gap: 10px;
+    }
+    #page-log-console h2 .page-log-meta {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 400;
+      letter-spacing: 0;
+      text-transform: none;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    .page-log-actions { display: flex; gap: 8px; align-items: center; }
+    .page-log-actions .page-log-autoscroll {
+      display: inline-flex; align-items: center; gap: 5px;
+      color: var(--muted); font-size: 11px;
+      text-transform: none; letter-spacing: 0;
+      margin: 0;
+    }
+    .page-log-actions .page-log-autoscroll input { margin: 0; }
+    .page-log-actions button.toggle.active {
+      background: var(--accent); border-color: var(--accent); color: #061322;
+    }
+    #page-log-body {
+      /* Match RuntimeLogConsole's PanelColor (black at 0.68 alpha). */
+      background: rgba(0, 0, 0, 0.68);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      height: 360px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      font-family: ui-monospace, "SF Mono", Menlo, "Consolas", monospace;
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: #dbe6f5; /* matches DefaultColor */
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,.22) transparent;
+    }
+    #page-log-body::-webkit-scrollbar { width: 8px; }
+    #page-log-body::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,.22); border-radius: 4px;
+    }
+    #page-log-body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.36); }
+    #page-log-body::-webkit-scrollbar-track { background: transparent; }
+    #page-log-body .log-line {
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+      padding: 1px 0;
+    }
+    #page-log-body .log-line.is-warn  { background: rgba(255, 199, 82, 0.06); }
+    #page-log-body .log-line.is-error { background: rgba(255, 82,  82, 0.10); }
+    #page-log-body .log-empty {
+      color: var(--muted); font-style: italic; padding: 4px 0;
+    }
     .testnet-notice .pulse-mark {
       display: inline-block;
       width: 6px; height: 6px; border-radius: 50%;
@@ -340,6 +495,46 @@
     table.leaderboard tr.rank-2 td.rank { color: #d8d8d8; font-weight: 700; }
     table.leaderboard tr.rank-3 td.rank { color: #c98e63; font-weight: 700; }
     table.leaderboard tr:last-child td { border-bottom: 0; }
+
+    /* NPC-name cell hosts both the hover tooltip ("owner: 0x…") and the inline
+       link badge that opens the TBA on the Arc testnet block explorer. */
+    table.leaderboard .npc-name {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: help;
+      max-width: 100%;
+    }
+    table.leaderboard .npc-name .name-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border-bottom: 1px dotted rgba(255,255,255,.18);
+    }
+    table.leaderboard .open-tba {
+      display: inline-flex; align-items: center;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .06em;
+      border-radius: 4px;
+      border: 1px solid rgba(102, 178, 255, .35);
+      background: rgba(102, 178, 255, .08);
+      color: var(--accent-2);
+      text-decoration: none;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      cursor: pointer;
+      transition: background .12s, border-color .12s, box-shadow .12s;
+      flex: 0 0 auto;
+    }
+    table.leaderboard .open-tba:hover {
+      background: rgba(102, 178, 255, .2);
+      border-color: rgba(102, 178, 255, .65);
+      box-shadow: 0 0 10px rgba(102, 178, 255, .25);
+    }
+    table.leaderboard .open-tba.is-disabled {
+      opacity: .35; pointer-events: none; cursor: not-allowed;
+    }
     .empty { padding: 16px 4px; color: var(--muted);
              font-size: 12px; text-align: center; }
     .leaderboard-header-controls { display: flex; align-items: center; gap: 8px; }
@@ -452,6 +647,9 @@
       <section class="panel" id="login-detail-panel">
         <div class="panel-header">
           <h2>Wallet Session</h2>
+          <span class="session-state" id="session-state" title="Cached SIWE session status">
+            <span class="dot"></span><span id="session-state-label">Not signed in</span>
+          </span>
         </div>
         <div class="row">
           <label>Network</label>
@@ -465,7 +663,12 @@
           <label>Challenge Nonce</label>
           <div class="value" id="nonce">—</div>
         </div>
+        <div class="row" id="session-expires-row" style="display:none">
+          <label>Session Expires</label>
+          <div class="value" id="session-expires">—</div>
+        </div>
         <div id="status" class="status" style="margin-top:10px">Detecting wallet…</div>
+        <button id="btn-signout" type="button" style="display:none" title="Forget cached SIWE session and unlock buttons">Sign Out</button>
       </section>
     </aside>
 
@@ -514,6 +717,193 @@
   </div>
 
   <!--
+    Web runtime console. Mirrors Assets/Scripts/Utils/RuntimeLogConsole.cs:
+    same dark-translucent backdrop, same mono font, same color rules. Captures
+    everything that goes through console.log/info/warn/error (so all of Unity's
+    Debug.Log forwards via emscripten land here too) plus uncaught errors and
+    promise rejections.
+  -->
+  <section id="page-log-console">
+    <header class="page-log-header">
+      <h2>Web Runtime Console <span class="page-log-meta" id="page-log-meta">0 lines</span></h2>
+      <div class="page-log-actions">
+        <label class="page-log-autoscroll">
+          <input type="checkbox" id="page-log-autoscroll" checked> Auto-scroll
+        </label>
+        <button id="page-log-pause" class="toggle" type="button">Pause</button>
+        <button id="page-log-copy" class="toggle" type="button">Copy</button>
+        <button id="page-log-clear" class="toggle" type="button">Clear</button>
+      </div>
+    </header>
+    <div id="page-log-body" aria-live="polite"><div class="log-empty">Waiting for log output&hellip;</div></div>
+  </section>
+
+  <!--
+    Console capture installed BEFORE the bootstrap module so it sees the
+    crypto-bridge import, dashboard polls, and Unity boot lines from the very
+    first call. Buffers entries until the DOM is ready, then flushes them into
+    #page-log-body. Mirrors RuntimeLogConsole.ResolveColor verbatim so the
+    palette matches the in-game console side by side.
+  -->
+  <script>
+    (function () {
+      if (window.__webLogConsole) return;
+      var MAX_LINES = 600;
+      var lines = [];
+      var bodyEl = null;
+      var metaEl = null;
+      var autoscrollCb = null;
+      var paused = false;
+
+      // ---- color rules (mirror RuntimeLogConsole.ResolveColor) ----
+      function resolveColor(msg, level) {
+        if (level === 'error') return '#ff5252';
+        if (level === 'warn')  return '#ffc752';
+        if (/payment wallet|Payment wallet|\[NpcPaymentWalletService\]|\[NpcPaymentKeyVault\]/.test(msg)) return '#ffd173';
+        if (/\[ArcNanopayment\]|nanopayment/.test(msg)) return '#8cd9ff';
+        if (/SellNFT|Withdraw/.test(msg)) return '#ff8cd9';
+        if (/BuyNFT|Deposit/.test(msg)) return '#8cffc7';
+        if (/\[MacroAgent\]/.test(msg)) return '#d9bfff';
+        if (/World event/.test(msg)) return '#ffa68c';
+        if (/\[WalletLoginServer\]|\[WalletLoginService\]|\[WalletSession\]/.test(msg)) return '#8cf28c';
+        if (/\[OwnedNpcSpawner\]/.test(msg)) return '#ffeb9e';
+        if (/Aggressive/.test(msg))   return '#ff615c';
+        if (/Balanced/.test(msg))     return '#40c7ff';
+        if (/Conservative/.test(msg)) return '#73f28c';
+        if (/Player/.test(msg))       return '#8cadff';
+        if (/Monster/.test(msg))      return '#d98cff';
+        if (/Actor/.test(msg))        return '#b8c2d6';
+        return colorForPrefix(msg);
+      }
+      function colorForPrefix(msg) {
+        var prefix = (msg.split(' ')[0] || '');
+        var hash = 0;
+        for (var i = 0; i < prefix.length; i++) {
+          hash = ((hash << 5) - hash) + prefix.charCodeAt(i);
+          hash |= 0;
+        }
+        var hue = (Math.abs(hash) % 360) / 360;
+        return hsvToHex(hue, 0.55, 1);
+      }
+      function hsvToHex(h, s, v) {
+        var r, g, b;
+        var i = Math.floor(h * 6);
+        var f = h * 6 - i;
+        var p = v * (1 - s);
+        var q = v * (1 - f * s);
+        var t = v * (1 - (1 - f) * s);
+        switch (i % 6) {
+          case 0: r=v; g=t; b=p; break;
+          case 1: r=q; g=v; b=p; break;
+          case 2: r=p; g=v; b=t; break;
+          case 3: r=p; g=q; b=v; break;
+          case 4: r=t; g=p; b=v; break;
+          default: r=v; g=p; b=q;
+        }
+        function hex(x) { return Math.round(x * 255).toString(16).padStart(2, '0'); }
+        return '#' + hex(r) + hex(g) + hex(b);
+      }
+
+      function formatArg(a) {
+        if (a === null) return 'null';
+        if (a === undefined) return 'undefined';
+        if (typeof a === 'string') return a;
+        if (a instanceof Error) return a.stack || (a.name + ': ' + a.message);
+        if (typeof a === 'function') return a.toString();
+        try { return JSON.stringify(a); } catch (_) { return String(a); }
+      }
+
+      function renderEntry(entry) {
+        if (!bodyEl) return;
+        var div = document.createElement('div');
+        div.className = 'log-line'
+          + (entry.level === 'warn'  ? ' is-warn'  : '')
+          + (entry.level === 'error' ? ' is-error' : '');
+        div.style.color = entry.color;
+        div.textContent = entry.msg;
+        bodyEl.appendChild(div);
+        while (bodyEl.childElementCount > MAX_LINES) {
+          bodyEl.removeChild(bodyEl.firstElementChild);
+        }
+      }
+      function refreshMeta() {
+        if (metaEl) metaEl.textContent = lines.length + (lines.length === 1 ? ' line' : ' lines');
+      }
+      function scrollToTail() {
+        if (bodyEl && (!autoscrollCb || autoscrollCb.checked)) {
+          bodyEl.scrollTop = bodyEl.scrollHeight;
+        }
+      }
+
+      // Only show Unity-side Debug.Log output. The convention across this repo
+      // is that those lines carry at least one [Tag] / [Namespace.Method]
+      // bracketed prefix (e.g. [WebGLChainApi.GetTbaItemBalancesAsync],
+      // [NpcPaymentWalletService], [ArcNanopayment]). Plain browser-side
+      // console.log noise (esm.sh module banners, viem traces, etc.) is
+      // dropped on the floor — it still goes to the DevTools console via the
+      // original handlers, just not to the on-page panel.
+      var BRACKETED_TAG_RE = /\[[^\]\r\n]+\]/;
+      function isUnityTaggedLine(msg) {
+        return BRACKETED_TAG_RE.test(msg);
+      }
+
+      function append(level, args) {
+        if (paused) return;
+        var msg = Array.prototype.map.call(args, formatArg).join(' ');
+        if (!isUnityTaggedLine(msg)) return;
+        var entry = { msg: msg, level: level, color: resolveColor(msg, level) };
+        lines.push(entry);
+        if (lines.length > MAX_LINES) lines.shift();
+        if (bodyEl) {
+          renderEntry(entry);
+          refreshMeta();
+          scrollToTail();
+        }
+      }
+
+      // ---- console hooks ----
+      var orig = {};
+      ['log','info','warn','error','debug'].forEach(function (k) {
+        orig[k] = console[k] ? console[k].bind(console) : function () {};
+      });
+      console.log   = function () { append('log',   arguments); orig.log.apply(null, arguments); };
+      console.info  = function () { append('log',   arguments); orig.info.apply(null, arguments); };
+      console.warn  = function () { append('warn',  arguments); orig.warn.apply(null, arguments); };
+      console.error = function () { append('error', arguments); orig.error.apply(null, arguments); };
+      console.debug = function () { append('log',   arguments); orig.debug.apply(null, arguments); };
+      window.addEventListener('error', function (e) {
+        append('error', ['Uncaught: ' + e.message + ' at ' + (e.filename || '?') + ':' + (e.lineno || 0) + ':' + (e.colno || 0)]);
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var reason = e.reason && e.reason.stack ? e.reason.stack : String(e.reason);
+        append('error', ['Unhandled rejection: ' + reason]);
+      });
+
+      window.__webLogConsole = {
+        attach: function (els) {
+          bodyEl = els.bodyEl;
+          metaEl = els.metaEl;
+          autoscrollCb = els.autoscrollCb;
+          // Drain buffered lines that landed before the DOM was ready.
+          if (bodyEl) {
+            bodyEl.innerHTML = '';
+            for (var i = 0; i < lines.length; i++) renderEntry(lines[i]);
+            refreshMeta();
+            scrollToTail();
+          }
+        },
+        clear: function () {
+          lines.length = 0;
+          if (bodyEl) bodyEl.innerHTML = '';
+          refreshMeta();
+        },
+        setPaused: function (p) { paused = !!p; },
+        snapshot: function () { return lines.slice(); },
+      };
+    })();
+  </script>
+
+  <!--
     Bootstrap:
       1. Load StreamingAssets/crypto-bridge.js so window.ArcTradingCryptoBridge /
          MetamaskBridge / PublicRpc are installed before Unity's .jslib externs
@@ -533,6 +923,37 @@
     const unityStageEl = document.getElementById('unity-stage');
     const unityContainerEl = document.getElementById('unity-container');
     let unityInstanceRef = null;
+
+    // ---- attach the early console capture to the on-page log panel ----
+    // The capture script above already buffered any console.* output emitted
+    // before this module evaluated; attach() flushes that buffer into the
+    // DOM panel and wires future writes to it.
+    (function wireWebLogConsole() {
+      const logBody       = document.getElementById('page-log-body');
+      const logMeta       = document.getElementById('page-log-meta');
+      const logAutoscroll = document.getElementById('page-log-autoscroll');
+      const logPause      = document.getElementById('page-log-pause');
+      const logCopy       = document.getElementById('page-log-copy');
+      const logClear      = document.getElementById('page-log-clear');
+      if (!window.__webLogConsole || !logBody) return;
+      window.__webLogConsole.attach({ bodyEl: logBody, metaEl: logMeta, autoscrollCb: logAutoscroll });
+      let paused = false;
+      logPause?.addEventListener('click', () => {
+        paused = !paused;
+        window.__webLogConsole.setPaused(paused);
+        logPause.textContent = paused ? 'Resume' : 'Pause';
+        logPause.classList.toggle('active', paused);
+      });
+      logCopy?.addEventListener('click', async () => {
+        const text = window.__webLogConsole.snapshot().map(l => l.msg).join('\n');
+        try { await navigator.clipboard.writeText(text); }
+        catch (_) { /* clipboard may be blocked; user can fall back to manual select */ }
+        const prev = logCopy.textContent;
+        logCopy.textContent = 'Copied';
+        setTimeout(() => { logCopy.textContent = prev; }, 1200);
+      });
+      logClear?.addEventListener('click', () => window.__webLogConsole.clear());
+    })();
 
     function setBootStatus(text, isErr) {
       statusEl.textContent = text;
@@ -803,6 +1224,12 @@
     const addressLabel = document.getElementById('address-label');
     const btnConnect = document.getElementById('btn-connect');
     const btnSign = document.getElementById('btn-sign');
+    const btnSignout = document.getElementById('btn-signout');
+    const sessionStateEl = document.getElementById('session-state');
+    const sessionStateLabelEl = document.getElementById('session-state-label');
+    const sessionExpiresRow = document.getElementById('session-expires-row');
+    const sessionExpiresEl = document.getElementById('session-expires');
+    const nonceEl = document.getElementById('nonce');
 
     function setStatus(text, kind) {
       statusBarEl.textContent = text;
@@ -811,26 +1238,99 @@
 
     let walletProvider = window.ethereum;
     let currentAddress = null;
-    const cachedSession = readBrowserWalletSession();
-    if (cachedSession && cachedSession.wallet && new Date(cachedSession.expiresAt) > new Date()) {
-      currentAddress = cachedSession.wallet;
-      addrEl.textContent = currentAddress;
-      addressLabel.textContent = shortenAddr(currentAddress);
-      addressPill.style.display = '';
-      addressPill.classList.add('ok');
-      btnSign.disabled = false;
-      btnConnect.textContent = 'Connected';
+
+    // Lock the header buttons + render a "Signed in" pill whenever there is a
+    // valid cached SIWE session. The previous code only flipped the connect
+    // button's *label* to "Connected" while leaving it clickable, and left the
+    // sign-in button enabled too — so a logged-in user could re-trigger
+    // MetaMask popups by accident. Centralizing UI state here means every
+    // transition (cache restore, post-sign, accountsChanged, chainChanged,
+    // manual sign-out) flows through one place.
+    function isSessionValid(session) {
+      return !!(session && session.wallet
+        && session.expiresAt
+        && new Date(session.expiresAt).getTime() > Date.now());
     }
+
+    function applyWalletSessionState(session) {
+      const noProvider = !walletProvider;
+      if (isSessionValid(session)) {
+        currentAddress = session.address || session.wallet;
+        addrEl.textContent = currentAddress;
+        addressLabel.textContent = shortenAddr(currentAddress);
+        addressPill.style.display = '';
+        addressPill.classList.add('ok');
+        if (session.nonce) nonceEl.textContent = session.nonce;
+
+        btnConnect.disabled = true;
+        btnConnect.classList.add('is-locked');
+        btnConnect.classList.remove('primary');
+        btnConnect.textContent = 'Connected';
+
+        btnSign.disabled = true;
+        btnSign.classList.add('is-locked');
+        btnSign.textContent = 'Signed In';
+
+        sessionStateEl.classList.add('is-signed-in');
+        sessionStateLabelEl.textContent = 'Signed in';
+
+        if (sessionExpiresRow && session.expiresAt) {
+          sessionExpiresRow.style.display = '';
+          try {
+            sessionExpiresEl.textContent = new Date(session.expiresAt).toLocaleString();
+          } catch (_) {
+            sessionExpiresEl.textContent = session.expiresAt;
+          }
+        }
+
+        btnSignout.style.display = '';
+
+        setStatus(`Signed in as ${shortenAddr(currentAddress)} — game will import this session when Unity is ready.`, 'ok');
+        return;
+      }
+
+      // No valid session → show the "needs to connect / sign" state.
+      currentAddress = null;
+      addrEl.textContent = '—';
+      addressLabel.textContent = '';
+      addressPill.style.display = 'none';
+      addressPill.classList.remove('ok');
+      nonceEl.textContent = '—';
+
+      btnConnect.classList.remove('is-locked');
+      btnSign.classList.remove('is-locked');
+      btnSign.textContent = 'Sign In';
+      btnSign.disabled = true;
+
+      sessionStateEl.classList.remove('is-signed-in');
+      sessionStateLabelEl.textContent = 'Not signed in';
+      if (sessionExpiresRow) sessionExpiresRow.style.display = 'none';
+      btnSignout.style.display = 'none';
+
+      if (noProvider) {
+        btnConnect.disabled = true;
+        btnConnect.classList.remove('primary');
+        btnConnect.textContent = 'Install MetaMask';
+        setStatus('No EIP-1193 wallet detected. Install MetaMask, Rabby, or Coinbase Wallet, then refresh.', 'err');
+      } else {
+        btnConnect.disabled = false;
+        btnConnect.classList.add('primary');
+        btnConnect.textContent = 'Connect Wallet';
+        setStatus('Wallet detected. Click "Connect Wallet" to continue.', '');
+      }
+    }
+
+    // Bootstrap UI state: restore any cached session or show the
+    // appropriate "needs wallet" / "needs connection" message.
+    applyWalletSessionState(readBrowserWalletSession());
+
+    // The user can still open the MetaMask install page if no provider exists —
+    // wire the click through manually since applyWalletSessionState() locks the
+    // button label but the click handler still resolves.
     if (!walletProvider) {
-      setStatus('No EIP-1193 wallet detected. Install MetaMask, Rabby, or Coinbase Wallet, then refresh.', 'err');
-      btnConnect.disabled = true;
-      btnConnect.textContent = 'Install MetaMask';
-      btnConnect.classList.remove('primary');
-      btnConnect.addEventListener('click', () => window.open('https://metamask.io/download/', '_blank', 'noopener'));
-    } else {
-      setStatus(currentAddress
-        ? 'Wallet session restored. The game will import this session when Unity is ready.'
-        : 'Wallet detected. Click "Connect Wallet" to continue.', currentAddress ? 'ok' : '');
+      btnConnect.addEventListener('click', () => {
+        if (btnConnect.disabled) window.open('https://metamask.io/download/', '_blank', 'noopener');
+      });
     }
     if (walletProvider?.on) {
       walletProvider.on('accountsChanged', () => clearBrowserWalletSession());
@@ -838,20 +1338,24 @@
     }
 
     btnConnect.addEventListener('click', async () => {
-      if (!walletProvider) return;
+      if (!walletProvider || btnConnect.disabled) return;
       btnConnect.disabled = true;
       setStatus('Requesting wallet connection…', '');
       try {
         const accounts = await walletProvider.request({ method: 'eth_requestAccounts' });
         if (!Array.isArray(accounts) || accounts.length === 0) throw new Error('wallet returned no accounts');
+        // Wallet account connected but not yet signed in — flip Sign In on,
+        // keep Connect "Connected" but unlocked-look since the SIWE step is
+        // what truly locks the session.
         currentAddress = accounts[0];
         addrEl.textContent = currentAddress;
         addressLabel.textContent = shortenAddr(currentAddress);
         addressPill.style.display = '';
         addressPill.classList.add('ok');
         btnSign.disabled = false;
+        btnSign.textContent = 'Sign In';
         btnConnect.textContent = 'Connected';
-        setStatus('Wallet connected. The game will request a SIWE signature when needed.', 'ok');
+        setStatus('Wallet connected. Click "Sign In" to authenticate this session.', 'ok');
       } catch (err) {
         console.error(err);
         setStatus(`Connection failed: ${err?.message ?? err}`, 'err');
@@ -860,12 +1364,12 @@
     });
 
     btnSign.addEventListener('click', async () => {
-      if (!currentAddress) return;
+      if (!currentAddress || btnSign.disabled) return;
       btnSign.disabled = true;
       setStatus('Awaiting SIWE signature…', '');
       try {
         const nonce = (cfg.nonce ?? cryptoRandomNonce());
-        document.getElementById('nonce').textContent = nonce;
+        nonceEl.textContent = nonce;
         const issuedAt = new Date().toISOString();
         const expiresAt = cfg.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
         const chainId = await resolveWalletChainId();
@@ -887,6 +1391,7 @@
           wallet: currentAddress.toLowerCase(),
           address: currentAddress,
           chainId,
+          nonce,
           issuedAt,
           expiresAt,
           message,
@@ -894,12 +1399,19 @@
         };
         cacheBrowserWalletSession(session);
         publishWalletSessionToUnity(session);
-        setStatus(`Signed (${shorten(signature)}). Game session signed in.`, 'ok');
+        applyWalletSessionState(session);
       } catch (err) {
         console.error(err);
         setStatus(`Signature cancelled or failed: ${err?.message ?? err}`, 'err');
         btnSign.disabled = false;
       }
+    });
+
+    btnSignout?.addEventListener('click', () => {
+      // Manual sign-out is the explicit user-driven path. accountsChanged /
+      // chainChanged use the same clear function, just without UI feedback.
+      clearBrowserWalletSession();
+      setStatus('Signed out. Connect and sign in again to resume.', '');
     });
 
     function cryptoRandomNonce() {
@@ -935,15 +1447,11 @@
       window.__arcLastSiwe = null;
       try { localStorage.removeItem(WALLET_SESSION_KEY); } catch (_) {}
       try { window.ArcTradingMetamaskBridge?.clearCachedSession?.(); } catch (_) {}
-      currentAddress = null;
-      addrEl.textContent = '-';
-      addressLabel.textContent = '';
-      addressPill.style.display = 'none';
-      addressPill.classList.remove('ok');
-      btnSign.disabled = true;
-      btnConnect.disabled = false;
-      btnConnect.textContent = 'Connect Wallet';
-      btnConnect.classList.add('primary');
+      // applyWalletSessionState(null) flips the buttons + badge back to the
+      // unsigned-in state and sets the default "Wallet detected" message.
+      // For accountsChanged / chainChanged transitions we then overwrite the
+      // status with a more specific note so the user understands what fired.
+      applyWalletSessionState(null);
       setStatus('Wallet changed. Connect and sign in again.', '');
     }
     function publishWalletSessionToUnity(session = window.__arcWalletSession) {
@@ -1335,6 +1843,11 @@
       renderLeaderboard(top, { scanned, total, gatewayConfigured: !!gateway });
     }
 
+    // Block explorer base URL — same convention as the Unity Inspector's
+    // NpcDemoScrollViewPopup.OpenExplorer ("$/address/{addr}"). Centralized
+    // here so swapping the testnet/mainnet host is a one-line change.
+    const ARCSCAN_BASE_URL = 'https://testnet.arcscan.app';
+
     function renderLeaderboard(rows, info) {
       const bodyEl = document.getElementById('leaderboard-body');
       const metaEl = document.getElementById('leaderboard-meta');
@@ -1359,11 +1872,31 @@
       rows.forEach((r, i) => {
         const rank = i + 1;
         const subline = `#${r.id} · ${r.archetype} · L${r.level}`;
+        // Hover-tooltip on the NPC name → full NFT owner address. Uses the
+        // native HTML title attribute so the browser handles positioning and
+        // delay. escapeHtml() also guards against future names that contain
+        // angle brackets.
+        const ownerTooltip = r.owner
+          ? `owner: ${r.owner}`
+          : 'owner unknown';
+        // Inline TBA→explorer link. Disabled-looking badge when the NPC has
+        // no TBA yet (still pre-bind) so the row layout doesn't shift.
+        const hasTba = r.tba && r.tba !== ZeroAddress;
+        const tbaBadge = hasTba
+          ? `<a class="open-tba" href="${ARCSCAN_BASE_URL}/address/${r.tba}" ` +
+              `target="_blank" rel="noopener noreferrer" ` +
+              `title="Open TBA ${r.tba} on Arcscan">TBA ↗</a>`
+          : `<span class="open-tba is-disabled" title="No TBA bound yet">TBA ↗</span>`;
         html.push(
           `<tr class="rank-${rank}">`,
           `<td class="rank num">${rank}</td>`,
-          `<td><div>${escapeHtml(r.name)}</div>` +
-            `<div style="color:var(--muted);font-size:10px">${escapeHtml(subline)}</div></td>`,
+          `<td>` +
+            `<div class="npc-name" title="${escapeHtml(ownerTooltip)}">` +
+              `<span class="name-text">${escapeHtml(r.name)}</span>` +
+              tbaBadge +
+            `</div>` +
+            `<div style="color:var(--muted);font-size:10px">${escapeHtml(subline)}</div>` +
+          `</td>`,
           `<td class="num">${fmtUsdc(r.tbaUsdc + r.gatewayUsdc + r.paymentUsdc)}</td>`,
           `<td class="num">${fmtUsdc(r.vault)}</td>`,
           `<td class="num" style="font-weight:600">${fmtUsdc(r.total)}</td>`,

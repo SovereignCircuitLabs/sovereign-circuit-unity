@@ -882,7 +882,7 @@ PrefabInstance:
     - target: {fileID: 7604934809089489008, guid: 6be6f6a63de895242b8afe9663738913,
         type: 3}
       propertyPath: nftContractAddress
-      value: 0xc5C3960379B00bcd5C48f23B57659e5411Dcb181
+      value: 0xA880A1f7f1bafD9dA67714b256C5270389dED49B
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

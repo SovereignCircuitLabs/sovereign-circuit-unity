@@ -413,6 +413,42 @@ MonoBehaviour:
   m_LightCookieSize: {x: 1, y: 1}
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 0
+--- !u!1 &1440791494 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 226990573672456509, guid: 7c29ca554a4023e4da06f636ad847484,
+    type: 3}
+  m_PrefabInstance: {fileID: 1028613251690097318}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1440791498
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1440791494}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 0.1282485, g: 0.17053625, b: 0.20754719, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 21300000, guid: bf8313cb82e6a8d4c80bbc30e5dd937b, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
 --- !u!1001 &1028613251690097318
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -574,12 +610,12 @@ PrefabInstance:
     - target: {fileID: 4278161742970473477, guid: 7c29ca554a4023e4da06f636ad847484,
         type: 3}
       propertyPath: marketplaceContractAddress
-      value: 0xfb5b6980aC86Fa14Ae3c11680c36E4DBcD5Ea927
+      value: 0xF761c5964eb146575b669fCd205a640689860233
       objectReference: {fileID: 0}
     - target: {fileID: 5824528031505793484, guid: 7c29ca554a4023e4da06f636ad847484,
         type: 3}
       propertyPath: pricingContractAddress
-      value: 0xDab18704A0903828f264c8DF81575deEA2CC529b
+      value: 0x26E25f1e0304261fdFA20C0eD1e6C085b14B51fC
       objectReference: {fileID: 0}
     - target: {fileID: 6459569602406719944, guid: 7c29ca554a4023e4da06f636ad847484,
         type: 3}
@@ -629,12 +665,18 @@ PrefabInstance:
     - target: {fileID: 8932619000280859599, guid: 7c29ca554a4023e4da06f636ad847484,
         type: 3}
       propertyPath: nftContractAddress
-      value: 0xc5C3960379B00bcd5C48f23B57659e5411Dcb181
+      value: 0xA880A1f7f1bafD9dA67714b256C5270389dED49B
       objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
+    m_RemovedComponents:
+    - {fileID: 4082109825954911855, guid: 7c29ca554a4023e4da06f636ad847484, type: 3}
+    m_RemovedGameObjects:
+    - {fileID: 1706052549391974394, guid: 7c29ca554a4023e4da06f636ad847484, type: 3}
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 226990573672456509, guid: 7c29ca554a4023e4da06f636ad847484,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1440791498}
   m_SourcePrefab: {fileID: 100100000, guid: 7c29ca554a4023e4da06f636ad847484, type: 3}
 --- !u!1001 &5723580904990230478
 PrefabInstance:
@@ -652,7 +694,7 @@ PrefabInstance:
     - target: {fileID: 5614780917043822022, guid: a7031146feabef2499e3702486ae04e8,
         type: 3}
       propertyPath: gamePaymentAddress
-      value: 0xf25924678C8bcFCa07bFF5E86E844A5c979B44e6
+      value: 0x524189db69Af7d0a8d5CB72b14e529bc1bF7B40c
       objectReference: {fileID: 0}
     - target: {fileID: 6753959578282451615, guid: a7031146feabef2499e3702486ae04e8,
         type: 3}
