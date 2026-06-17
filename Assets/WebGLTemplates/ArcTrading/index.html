@@ -6,7 +6,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="referrer" content="no-referrer" />
   <title>{{{ PRODUCT_NAME }}}</title>
-  <link rel="shortcut icon" href="TemplateData/favicon.ico" />
+  <link rel="icon" type="image/png" href="TemplateData/logo.png" />
+  <link rel="shortcut icon" type="image/png" href="TemplateData/logo.png" />
+  <link rel="apple-touch-icon" href="TemplateData/logo.png" />
 
   <!--
     Runtime config for the dashboard panels (leaderboard + price chart).
@@ -44,7 +46,10 @@
       --gold: #ffd166;
       --header-h: 56px;
       --footer-h: 36px;
-      --side-w: 340px;
+      /* Side panels shrink with the viewport so the Unity stage in the middle
+         stays large enough to read on 1440p / laptop screens. Min keeps the
+         leaderboard's 5-column table legible; max caps growth on ultrawides. */
+      --side-w: clamp(260px, 20vw, 320px);
       --gutter: 10px;
     }
     html { height: 100%; }
@@ -146,15 +151,18 @@
       display: flex; align-items: center; gap: 10px;
       font-weight: 700; letter-spacing: .08em; font-size: 15px;
     }
-    .brand .logo-dot {
-      width: 10px; height: 10px; border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 12px var(--accent);
+    .brand .logo-img {
+      width: 28px; height: 28px;
+      object-fit: contain;
+      border-radius: 6px;
+      /* The PNG's blue/cyan edge already glows, so the box-shadow just
+         amplifies it into a soft halo that breathes with the brand. */
+      filter: drop-shadow(0 0 6px rgba(102, 178, 255, .55));
       animation: logo-pulse 2.4s ease-in-out infinite;
     }
     @keyframes logo-pulse {
-      0%, 100% { box-shadow: 0 0 6px var(--accent), 0 0 0 0 rgba(102,178,255,0); }
-      50%      { box-shadow: 0 0 14px var(--accent), 0 0 24px rgba(102,178,255,.4); }
+      0%, 100% { filter: drop-shadow(0 0 4px rgba(102, 178, 255, .35)); }
+      50%      { filter: drop-shadow(0 0 12px rgba(102, 178, 255, .75)); }
     }
     .brand small { font-weight: 400; color: var(--muted); font-size: 11px;
                    letter-spacing: .04em; margin-left: 6px; }
@@ -310,6 +318,13 @@
       letter-spacing: .04em;
       opacity: .92;
       padding: 0 16px;
+      /* Footer row is locked to --footer-h (36px). If the notice wraps to a
+         second line it overflows downward into #page-log-console and looks
+         like the two panels are overlapping. Force single-line + ellipsis. */
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
     }
 
     /* ---- wallet session "signed in" indicator + sign-out action ---- */
@@ -380,7 +395,11 @@
 
     /* ---- web runtime console (mirrors Unity RuntimeLogConsole) ---- */
     #page-log-console {
-      margin: 0 var(--gutter) var(--gutter) var(--gutter);
+      /* Bigger top margin so the testnet-notice in #ui-footer reads as a
+         separate bar above this panel rather than touching it. The previous
+         0 top margin only left the #app-shell padding (10px) between them,
+         which visually merged the two panels. */
+      margin: 22px var(--gutter) var(--gutter) var(--gutter);
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
@@ -596,7 +615,7 @@
     <!-- ====== header ====== -->
     <header id="ui-header">
       <div class="brand">
-        <span class="logo-dot"></span>
+        <img class="logo-img" src="TemplateData/logo.png" alt="SovereignCircuit logo" />
         <span>{{{ PRODUCT_NAME }}}</span>
         <small>v{{{ PRODUCT_VERSION }}}</small>
         <span class="arc-badge" title="Built for Arc Sepolia testnet">
