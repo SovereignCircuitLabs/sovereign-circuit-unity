@@ -953,7 +953,7 @@
         </svg>
         <span id="focus-toggle-label">Focus mode</span>
       </button>
-      <button id="btn-import-wallet" type="button" title="Import this NPC's operator wallet into MetaMask">
+      <button id="btn-import-wallet" type="button" title="Import this NPC's payment wallet into MetaMask">
         <span class="dot"></span>
         <span>Import</span>
         <span class="npc-name" id="btn-import-wallet-name">NPC</span>
@@ -968,7 +968,7 @@
       <div class="dialog">
         <h2 id="import-wallet-title">Import this private key wallet into MetaMask?</h2>
         <p class="subtitle" id="import-wallet-subtitle">
-          This will reveal the NPC's operator wallet private key so you can import it into MetaMask and manage its funds directly.
+          This will reveal the NPC's payment wallet private key so you can import it into MetaMask and manage its funds directly.
         </p>
 
         <div class="npc-info">
@@ -993,7 +993,7 @@
             <li>Click your address at the <strong>top-left</strong> of the MetaMask popup to open the account list.</li>
             <li>Scroll to the bottom of that panel and click <strong>Add wallet</strong>.</li>
             <li>Choose <strong>Import a wallet</strong> (private key), paste the key above, and confirm.</li>
-            <li>Once imported, switch to the new account to manage the NPC's operator wallet directly from MetaMask.</li>
+            <li>Once imported, switch to the new account to manage the NPC's payment wallet directly from MetaMask.</li>
           </ol>
         </div>
 
@@ -2465,7 +2465,7 @@
 
     // ---- Import-wallet button + modal (Unity → HTML) ----
     // When a player clicks an NPC in-game, Unity calls ArcImportWallet_Show(json)
-    // with that NPC's operator wallet. We surface a floating button; clicking
+    // with that NPC's payment wallet. We surface a floating button; clicking
     // it opens a confirm modal, and confirm reveals the PK + copy + steps.
     // The PK only enters the DOM after explicit user confirmation.
     (function wireImportWalletModal() {
