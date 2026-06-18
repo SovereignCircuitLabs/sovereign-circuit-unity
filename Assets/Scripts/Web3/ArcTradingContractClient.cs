@@ -172,6 +172,22 @@ public class ArcTradingContractClient : MonoBehaviour
         await EnsureTbaAddressAsync();
         return signer;
     }
+
+    /// <summary>
+    /// Read-only counterpart to <see cref="EnsurePaymentWalletBoundAsync"/>:
+    /// returns the locally-vaulted signer if there is one, otherwise null.
+    /// Never opens a MetaMask popup, never enqueues an owner-side tx, never
+    /// waits on <c>ownerTxGate</c>. UI click handlers (e.g. "show NPC info /
+    /// Import wallet to MetaMask") should use this so they don't queue
+    /// behind the init pipeline's bind/fund tx that is parked on an open
+    /// MetaMask popup.
+    /// </summary>
+    public Task<NpcPaymentSigner?> TryGetCachedPaymentSignerAsync()
+    {
+        if (npcPaymentWalletService == null || nftTokenId == 0)
+            return Task.FromResult<NpcPaymentSigner?>(null);
+        return npcPaymentWalletService.TryGetCachedSignerAsync(NftTokenId);
+    }
     
     public async Task<string> EnsureTbaAddressAsync()
     {

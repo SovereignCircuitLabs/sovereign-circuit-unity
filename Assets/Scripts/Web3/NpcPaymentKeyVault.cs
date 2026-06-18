@@ -9,6 +9,7 @@ using Newtonsoft.Json;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Modes;
 using Org.BouncyCastle.Crypto.Parameters;
+using ArcTrading.WebGL;
 using UnityEngine;
 
 [Serializable]
@@ -139,6 +140,11 @@ public class NpcPaymentKeyVault
         File.WriteAllText(tmp, JsonConvert.SerializeObject(cache, Formatting.Indented));
         if (File.Exists(filePath)) File.Replace(tmp, filePath, null);
         else File.Move(tmp, filePath);
+
+        // WebGL only: persistentDataPath lives in MEMFS until FS.syncfs flushes
+        // it to IndexedDB. Without this call the just-written vault entry is
+        // lost the moment the user navigates away from the page.
+        WebGLPersistBridge.RequestSync();
     }
 
     // ---------- Crypto: AES-256-GCM, device-bound key ----------

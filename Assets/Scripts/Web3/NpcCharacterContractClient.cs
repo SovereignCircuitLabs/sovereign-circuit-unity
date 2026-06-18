@@ -164,6 +164,17 @@ public class NpcCharacterContractClient : MonoBehaviour
     // (local path) or interleave MetaMask popups (bridge path).
     private static readonly SemaphoreSlim ownerTxGate = new SemaphoreSlim(1, 1);
 
+    // Whoever currently holds ownerTxGate, for diagnostics. Writes happen on
+    // the Unity main thread (single-threaded under WebGL; effectively
+    // single-thread for owner-tx callers on Desktop because awaits trampoline
+    // back to the captured SyncContext), so no Interlocked is needed.
+    // The watchdog in SendOwnerTxAsync reads these to surface "gate held by X
+    // for Ns" when an in-flight owner tx (typically an unconfirmed MetaMask
+    // popup) is keeping the next caller parked.
+    private static string ownerTxHolderLabel;
+    private static DateTime ownerTxHolderAcquiredAt;
+    private const int GateWatchdogIntervalMs = 30_000;
+
     public long? CachedChainId { get; private set; }
 
     private void Awake()
@@ -505,8 +516,25 @@ public class NpcCharacterContractClient : MonoBehaviour
     {
         Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): entering, awaiting chainId");
         var chainId = await GetChainIdAsync();
-        Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): chainId={chainId}, awaiting ownerTxGate");
-        await ownerTxGate.WaitAsync();
+
+        // Surface the current holder so logs reveal *who* is parking the gate
+        // (typical culprit: a previous SendOwnerTxAsync whose MetaMask popup
+        // the user dismissed without confirming).
+        var holderAtEntry = ownerTxHolderLabel;
+        if (holderAtEntry != null)
+        {
+            var heldFor = (DateTime.UtcNow - ownerTxHolderAcquiredAt).TotalSeconds;
+            Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): chainId={chainId}, awaiting ownerTxGate "
+                      + $"(currently held by '{holderAtEntry}' for {heldFor:F0}s)");
+        }
+        else
+        {
+            Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): chainId={chainId}, awaiting ownerTxGate (gate is free)");
+        }
+
+        await AcquireOwnerTxGateWithWatchdogAsync(label);
+        ownerTxHolderLabel = label;
+        ownerTxHolderAcquiredAt = DateTime.UtcNow;
         Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): ownerTxGate acquired");
         try
         {
@@ -547,8 +575,60 @@ public class NpcCharacterContractClient : MonoBehaviour
         finally
         {
             Debug.Log($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): finally — releasing ownerTxGate");
+            // Clear holder *before* Release so the next waiter that resumes
+            // doesn't briefly observe a stale label.
+            ownerTxHolderLabel = null;
             ownerTxGate.Release();
         }
+    }
+
+    /// <summary>
+    /// Wraps <c>ownerTxGate.WaitAsync()</c> with a watchdog that logs a
+    /// warning every <see cref="GateWatchdogIntervalMs"/> while the wait is
+    /// still in flight. The watchdog uses <c>WebGLAsyncBridge.DelayMsAsync</c>
+    /// which is the only timer known to wake reliably under Unity's WebGL
+    /// SyncContext (see [[webgl-task-delay-rule]]).
+    ///
+    /// The same WaitAsync task is kept across watchdog ticks — re-issuing it
+    /// would leak a permit when the gate eventually releases.
+    /// </summary>
+    private static async Task AcquireOwnerTxGateWithWatchdogAsync(string label)
+    {
+        var waitTask = ownerTxGate.WaitAsync();
+        var waitStart = DateTime.UtcNow;
+
+        while (!waitTask.IsCompleted)
+        {
+            var tickTask = ArcTrading.Crypto.WebGLAsyncBridge.DelayMsAsync(GateWatchdogIntervalMs);
+            var winner = await Task.WhenAny(waitTask, tickTask).ConfigureAwait(true);
+            if (winner == waitTask) break;
+            // Gate may have freed *just* before/during the tick fired — its
+            // continuation is queued but hasn't run yet. Re-check so we don't
+            // log a "still waiting" warning a frame before the wait resolves.
+            if (waitTask.IsCompleted) break;
+
+            var waited = (DateTime.UtcNow - waitStart).TotalSeconds;
+            var holder = ownerTxHolderLabel;
+            if (holder != null)
+            {
+                var heldFor = (DateTime.UtcNow - ownerTxHolderAcquiredAt).TotalSeconds;
+                Debug.LogWarning($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): "
+                                 + $"still waiting for ownerTxGate after {waited:F0}s — "
+                                 + $"held by '{holder}' for {heldFor:F0}s. "
+                                 + "If a MetaMask popup was dismissed, the holder will give up around 5 min.");
+            }
+            else
+            {
+                // No holder label but gate not acquired — SemaphoreSlim's
+                // async continuation hasn't woken (a known edge case under
+                // Unity WebGL's SyncContext). Worth surfacing prominently.
+                Debug.LogWarning($"[NpcCharacterContractClient] SendOwnerTxAsync({label}): "
+                                 + $"still waiting for ownerTxGate after {waited:F0}s but no holder is recorded. "
+                                 + "The semaphore continuation may have been dropped by the WebGL SyncContext.");
+            }
+        }
+
+        await waitTask.ConfigureAwait(true);
     }
 
     private async Task<string> SendViaBridgeAsync(

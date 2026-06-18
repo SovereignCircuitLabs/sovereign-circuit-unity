@@ -243,10 +243,13 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
 
     // WebGL only: forward the selected NPC's operator wallet (address + PK) to
     // the page template so it can surface a floating "Import wallet to MetaMask"
-    // button + confirm modal. PK fetch is async — the existing in-game "Copy PK"
-    // button has the same shape and re-uses EnsurePaymentWalletBoundAsync.
-    // We push lastPushedImportWalletNpc as a guard so a rapid click-cycle on
-    // the same NPC doesn't enqueue duplicate awaits.
+    // button + confirm modal. Pure vault read — TryGetCachedPaymentSignerAsync
+    // never opens a MetaMask popup or queues on ownerTxGate, so clicking an
+    // NPC while the init pipeline's bind/fund tx is still parked on a popup
+    // can't deadlock behind it. If the vault doesn't have a key yet (init
+    // hasn't bound, or bind is mid-flight), we hide the import button and
+    // clear lastPushedImportWalletNpc so the next click after init completes
+    // re-attempts the push.
     private async void PushImportWalletToBrowser()
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -259,18 +262,27 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
             return;
         }
         if (ReferenceEquals(npc, lastPushedImportWalletNpc)) return;
-        lastPushedImportWalletNpc = npc;
 
         ArcTradingContractClient client = npc.GetComponent<ArcTradingContractClient>();
         if (client == null) return;
 
         try
         {
-            NpcPaymentSigner? signer = await client.EnsurePaymentWalletBoundAsync();
+            NpcPaymentSigner? signer = await client.TryGetCachedPaymentSignerAsync();
             // The user may have selected a different NPC while we awaited —
             // bail so we don't overwrite the newer push.
             if (!ReferenceEquals(npc, dataSource.SelectedNpc)) return;
-            if (!signer.HasValue) return;
+            if (!signer.HasValue)
+            {
+                // Init hasn't bound a payment wallet yet for this NPC — hide
+                // the import button rather than triggering a competing bind
+                // tx, and DON'T cache lastPushedImportWalletNpc so the next
+                // click after init completes will retry the push.
+                try { ArcImportWallet_Hide(); } catch (Exception) {}
+                return;
+            }
+
+            lastPushedImportWalletNpc = npc;
 
             var payload = new ImportWalletPayload
             {

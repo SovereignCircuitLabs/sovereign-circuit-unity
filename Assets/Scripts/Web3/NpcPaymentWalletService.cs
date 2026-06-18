@@ -132,6 +132,30 @@ public class NpcPaymentWalletService : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Pure vault read — no chain call beyond cached chainId, no owner-tx, no
+    /// MetaMask popup. Returns the locally-cached signer if we have one for
+    /// this token, otherwise null. Use this from UI click handlers that need
+    /// to *display* the payment wallet without competing with the init
+    /// pipeline's bind / fund flow for the owner-tx gate.
+    ///
+    /// Caller MUST treat null as "not yet bound on this device" and degrade
+    /// gracefully (e.g. hide an Import button) rather than fall back to
+    /// EnsureBoundOrRebindAsync, which would re-introduce the gate contention.
+    /// </summary>
+    public async Task<NpcPaymentSigner?> TryGetCachedSignerAsync(BigInteger tokenId)
+    {
+        if (npcContract == null) return null;
+        var chainId = await npcContract.GetChainIdAsync();
+        var contractAddr = npcContract.NftContractAddress;
+        if (vault.TryGet(contractAddr, chainId, tokenId,
+                out var addr, out var pk, out var cachedV))
+        {
+            return new NpcPaymentSigner(tokenId, addr, pk, cachedV);
+        }
+        return null;
+    }
+
     public async Task<NpcPaymentSigner> ForceRebindAsync(BigInteger tokenId)
     {
         var chainId = await npcContract.GetChainIdAsync();
