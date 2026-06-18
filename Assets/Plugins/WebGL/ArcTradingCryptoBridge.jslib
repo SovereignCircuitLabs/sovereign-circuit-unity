@@ -367,6 +367,46 @@ mergeInto(LibraryManager.library, {
       console.error('[ArcDashboard_SetConfig] failed to apply config', e, json);
     }
   },
+
+  // ------------------ Import-wallet button (Unity → HTML) ------------------
+  // When the player clicks an NPC in-game, Unity pushes the NPC's operator
+  // wallet (address + private key) to the page so the WebGL template can
+  // surface a floating "Import wallet to MetaMask" button + confirm modal.
+  // MetaMask has no programmatic private-key import API for security reasons
+  // (https://github.com/MetaMask/metamask-extension/issues/14252), so the
+  // page-side flow is "confirm → reveal key + copy button + import steps".
+  //
+  // jsonPtr payload: {"npcName":"Alice","address":"0x...","privateKey":"0x..."}
+  // Same __pending stash trick as ArcDashboard_SetConfig — if Unity boots
+  // faster than the page module, we hold the payload until installArcImportWallet
+  // is defined.
+  ArcImportWallet_Show: function (jsonPtr) {
+    var json = UTF8ToString(jsonPtr);
+    try {
+      var payload = JSON.parse(json);
+      if (typeof window.installArcImportWallet === 'function') {
+        window.installArcImportWallet(payload);
+      } else {
+        window.__pendingArcImportWallet = payload;
+      }
+    } catch (e) {
+      console.error('[ArcImportWallet_Show] failed to apply payload', e, json);
+    }
+  },
+
+  ArcImportWallet_Hide: function () {
+    try {
+      if (typeof window.hideArcImportWallet === 'function') {
+        window.hideArcImportWallet();
+      } else {
+        // If the page module hasn't installed the API yet, suppress the
+        // stashed Show so we don't pop a stale modal on boot.
+        window.__pendingArcImportWallet = null;
+      }
+    } catch (e) {
+      console.error('[ArcImportWallet_Hide] failed', e);
+    }
+  },
 });
 
 // ===========================================================================

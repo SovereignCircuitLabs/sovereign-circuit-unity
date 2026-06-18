@@ -264,6 +264,65 @@
       setStatus('Wallet detected. Click "Connect Wallet" to continue.', 'info');
     }
 
+    // Arc Testnet metadata — used to force the wallet onto chain 5042002
+    // before SIWE so subsequent eth_sendTransactions don't land on Ethereum
+    // mainnet and charge ETH for gas instead of Arc's USDC native gas token.
+    const ARC_CHAIN_ID_DEFAULT = 5042002;
+    const ARC_CHAIN_PARAMS = {
+      chainName: 'Arc Testnet',
+      rpcUrls: ['https://rpc.testnet.arc.network'],
+      nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 6 },
+      blockExplorerUrls: ['https://testnet.arcscan.app'],
+    };
+
+    async function ensureWalletOnExpectedChain() {
+      if (!provider) return;
+      const expected = Number(cfg.chainId) || ARC_CHAIN_ID_DEFAULT;
+      if (!expected) return;
+      const expectedHex = '0x' + expected.toString(16);
+      let currentHex = '';
+      try {
+        currentHex = await provider.request({ method: 'eth_chainId' });
+      } catch (err) {
+        throw new Error(`Failed to read wallet chain id: ${err?.message ?? err}`);
+      }
+      if (currentHex && Number.parseInt(currentHex, 16) === expected) return;
+
+      const chainParams = {
+        ...ARC_CHAIN_PARAMS,
+        chainId: expectedHex,
+        rpcUrls: cfg.rpcUrl ? [cfg.rpcUrl] : ARC_CHAIN_PARAMS.rpcUrls,
+      };
+
+      try {
+        await provider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: expectedHex }],
+        });
+      } catch (err) {
+        const code = err?.code ?? err?.data?.originalError?.code;
+        const msg = err?.message ?? '';
+        if (code === 4902 || /Unrecognized chain|wallet_addEthereumChain|add the chain/i.test(msg)) {
+          await provider.request({ method: 'wallet_addEthereumChain', params: [chainParams] });
+          try {
+            await provider.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: expectedHex }],
+            });
+          } catch (_) {}
+        } else if (code === 4001) {
+          throw new Error('You rejected the chain switch. Please switch to Arc Testnet in MetaMask, then reconnect.');
+        } else {
+          throw err;
+        }
+      }
+
+      const verifyHex = await provider.request({ method: 'eth_chainId' });
+      if (Number.parseInt(verifyHex, 16) !== expected) {
+        throw new Error(`Wallet is still on chain ${Number.parseInt(verifyHex, 16)} after switch; expected ${expected} (Arc Testnet).`);
+      }
+    }
+
     // ----- connect -----
     btnConnect.addEventListener('click', async () => {
       if (!provider) return;
@@ -274,10 +333,12 @@
         if (!Array.isArray(accounts) || accounts.length === 0) {
           throw new Error('wallet returned no accounts');
         }
+        setStatus('Switching wallet to Arc Testnet…', 'info');
+        await ensureWalletOnExpectedChain();
         currentAddress = accounts[0];
         addrEl.textContent = currentAddress;
         btnSign.disabled = false;
-        setStatus('Wallet connected. Click "Sign In" to sign the challenge message.', 'info');
+        setStatus('Wallet connected on Arc Testnet. Click "Sign In" to sign the challenge message.', 'info');
       } catch (err) {
         console.error(err);
         setStatus(`Connection failed: ${err?.message ?? err}`, 'err');

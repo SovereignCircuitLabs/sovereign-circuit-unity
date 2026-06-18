@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -53,6 +54,21 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
     private const string GroupColor = "#FFD24A";    // 金黄色 — [Group] 标题
     private const string TypeColor = "#4FD1C5";     // 青色 — 活动类型
     private const string HashColor = "#B794F4";     // 紫色 — 交易哈希
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    [DllImport("__Internal")] private static extern void ArcImportWallet_Show(string json);
+    [DllImport("__Internal")] private static extern void ArcImportWallet_Hide();
+#endif
+
+    [Serializable]
+    private class ImportWalletPayload
+    {
+        public string npcName;
+        public string address;
+        public string privateKey;
+    }
+
+    private TradingNpcActor lastPushedImportWalletNpc;
 
     private void Awake()
     {
@@ -222,6 +238,53 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
         }
 
         RenderSnapshot(snapshot);
+        PushImportWalletToBrowser();
+    }
+
+    // WebGL only: forward the selected NPC's operator wallet (address + PK) to
+    // the page template so it can surface a floating "Import wallet to MetaMask"
+    // button + confirm modal. PK fetch is async — the existing in-game "Copy PK"
+    // button has the same shape and re-uses EnsurePaymentWalletBoundAsync.
+    // We push lastPushedImportWalletNpc as a guard so a rapid click-cycle on
+    // the same NPC doesn't enqueue duplicate awaits.
+    private async void PushImportWalletToBrowser()
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        if (dataSource == null) return;
+        TradingNpcActor npc = dataSource.SelectedNpc;
+        if (npc == null)
+        {
+            try { ArcImportWallet_Hide(); } catch (Exception) {}
+            lastPushedImportWalletNpc = null;
+            return;
+        }
+        if (ReferenceEquals(npc, lastPushedImportWalletNpc)) return;
+        lastPushedImportWalletNpc = npc;
+
+        ArcTradingContractClient client = npc.GetComponent<ArcTradingContractClient>();
+        if (client == null) return;
+
+        try
+        {
+            NpcPaymentSigner? signer = await client.EnsurePaymentWalletBoundAsync();
+            // The user may have selected a different NPC while we awaited —
+            // bail so we don't overwrite the newer push.
+            if (!ReferenceEquals(npc, dataSource.SelectedNpc)) return;
+            if (!signer.HasValue) return;
+
+            var payload = new ImportWalletPayload
+            {
+                npcName = npc.name,
+                address = signer.Value.Address,
+                privateKey = signer.Value.PrivateKey,
+            };
+            ArcImportWallet_Show(JsonUtility.ToJson(payload));
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"[ArcImportWallet] failed to resolve payment wallet for {npc.name}: {ex.Message}");
+        }
+#endif
     }
 
     private void RenderSnapshot(TradingNpcSnapshot snapshot)
@@ -629,6 +692,10 @@ public class NpcDemoScrollViewPopup : MonoBehaviour
         {
             popupRoot.SetActive(false);
         }
+#if UNITY_WEBGL && !UNITY_EDITOR
+        try { ArcImportWallet_Hide(); } catch (Exception) {}
+        lastPushedImportWalletNpc = null;
+#endif
     }
 
     private void EnsureRuntimeUi()

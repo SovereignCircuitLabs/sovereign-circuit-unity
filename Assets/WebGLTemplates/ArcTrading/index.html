@@ -335,6 +335,197 @@
       box-shadow: 0 0 12px rgba(102,178,255,.25);
     }
     #btn-focus-toggle svg { width: 12px; height: 12px; flex: 0 0 auto; }
+
+    /* ---- Import-wallet floating button + modal ----
+       Appears at the top-left of the Unity stage when a player clicks an NPC
+       in-game. Unity pushes {npcName, address, privateKey} via the
+       ArcImportWallet_Show jslib extern. Clicking the button opens a confirm
+       modal — confirm reveals the PK with a copy button and MetaMask import
+       instructions (no programmatic key import is possible — MetaMask
+       intentionally blocks that). */
+    #btn-import-wallet {
+      position: absolute;
+      top: 10px; left: 10px;
+      z-index: 5;
+      display: none;
+      align-items: center; gap: 6px;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 209, 102, .55);
+      background: rgba(11, 13, 18, .82);
+      color: var(--gold);
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      transition: background .15s, border-color .15s, box-shadow .15s, transform .15s;
+    }
+    #btn-import-wallet:hover {
+      background: rgba(11, 13, 18, .96);
+      border-color: rgba(255, 209, 102, .9);
+      box-shadow: 0 0 14px rgba(255, 209, 102, .35);
+      transform: translateY(-1px);
+    }
+    #btn-import-wallet.is-visible { display: inline-flex; }
+    #btn-import-wallet .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--gold);
+      box-shadow: 0 0 6px var(--gold);
+      animation: notice-pulse 1.8s ease-in-out infinite;
+    }
+    #btn-import-wallet .npc-name {
+      max-width: 160px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    .import-wallet-overlay {
+      position: fixed; inset: 0;
+      z-index: 100;
+      display: none;
+      align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, .65);
+      backdrop-filter: blur(4px);
+    }
+    .import-wallet-overlay.is-open { display: flex; }
+    .import-wallet-overlay .dialog {
+      width: min(520px, calc(100vw - 48px));
+      max-height: calc(100vh - 64px);
+      overflow-y: auto;
+      background: var(--panel);
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      padding: 22px 24px 20px 24px;
+      color: var(--fg);
+      box-shadow: 0 22px 64px rgba(0, 0, 0, .55);
+    }
+    .import-wallet-overlay .dialog h2 {
+      margin: 0 0 6px 0;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      color: var(--accent-2);
+    }
+    .import-wallet-overlay .dialog .subtitle {
+      margin: 0 0 14px 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .import-wallet-overlay .dialog .npc-info {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+      font-size: 12px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      color: var(--fg);
+      word-break: break-all;
+    }
+    .import-wallet-overlay .dialog .npc-info .label {
+      color: var(--muted);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      font-size: 10px;
+      margin-top: 6px;
+    }
+    .import-wallet-overlay .dialog .npc-info .label:first-child { margin-top: 0; }
+    .import-wallet-overlay .dialog .pk-row {
+      display: none;
+      align-items: stretch; gap: 8px;
+      margin-bottom: 14px;
+    }
+    .import-wallet-overlay.show-key .pk-row { display: flex; }
+    .import-wallet-overlay .dialog .pk-value {
+      flex: 1; min-width: 0;
+      padding: 9px 10px;
+      background: rgba(255, 209, 102, .06);
+      border: 1px solid rgba(255, 209, 102, .35);
+      border-radius: 6px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11px;
+      color: var(--gold);
+      word-break: break-all;
+      user-select: all;
+    }
+    .import-wallet-overlay .dialog .pk-copy {
+      padding: 0 12px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 6px;
+      border: 1px solid var(--border-strong);
+      background: var(--panel-2);
+      color: var(--fg);
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .import-wallet-overlay .dialog .pk-copy:hover {
+      background: var(--panel);
+      border-color: var(--accent);
+      color: var(--accent-2);
+    }
+    .import-wallet-overlay .dialog .steps {
+      display: none;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--gold);
+      border-radius: 8px;
+      padding: 12px 14px 12px 16px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--fg);
+    }
+    .import-wallet-overlay.show-key .steps { display: block; }
+    .import-wallet-overlay .dialog .steps strong { color: var(--gold); }
+    .import-wallet-overlay .dialog .steps ol { margin: 6px 0 0 0; padding-left: 18px; }
+    .import-wallet-overlay .dialog .steps li { margin-bottom: 4px; }
+    .import-wallet-overlay .dialog .steps li:last-child { margin-bottom: 0; }
+    .import-wallet-overlay .dialog .warn {
+      font-size: 11px;
+      color: var(--err);
+      background: rgba(255, 122, 122, .07);
+      border: 1px solid rgba(255, 122, 122, .35);
+      border-radius: 6px;
+      padding: 8px 10px;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+    .import-wallet-overlay .dialog .actions {
+      display: flex; gap: 10px; justify-content: flex-end;
+      margin-top: 6px;
+    }
+    .import-wallet-overlay .dialog .actions button {
+      padding: 8px 18px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, box-shadow .15s;
+    }
+    .import-wallet-overlay .dialog .actions .btn-cancel {
+      background: var(--panel-2);
+      border: 1px solid var(--border-strong);
+      color: var(--fg);
+    }
+    .import-wallet-overlay .dialog .actions .btn-cancel:hover {
+      border-color: var(--accent);
+      color: var(--accent-2);
+    }
+    .import-wallet-overlay .dialog .actions .btn-confirm {
+      background: rgba(255, 209, 102, .14);
+      border: 1px solid rgba(255, 209, 102, .55);
+      color: var(--gold);
+    }
+    .import-wallet-overlay .dialog .actions .btn-confirm:hover {
+      background: rgba(255, 209, 102, .22);
+      border-color: var(--gold);
+      box-shadow: 0 0 14px rgba(255, 209, 102, .35);
+    }
+    .import-wallet-overlay.show-key .btn-confirm { display: none; }
+
     #unity-loading-bar {
       position: absolute; left: 50%; top: 50%;
       transform: translate(-50%, -50%); text-align: center;
@@ -762,6 +953,55 @@
         </svg>
         <span id="focus-toggle-label">Focus mode</span>
       </button>
+      <button id="btn-import-wallet" type="button" title="Import this NPC's operator wallet into MetaMask">
+        <span class="dot"></span>
+        <span>Import</span>
+        <span class="npc-name" id="btn-import-wallet-name">NPC</span>
+        <span>→ MetaMask</span>
+      </button>
+    </div>
+
+    <!-- Import-wallet confirmation + key-reveal modal. Hidden by default; the
+         "is-open" class flips display:flex and "show-key" reveals the PK row +
+         instructions after the user confirms the first prompt. -->
+    <div id="import-wallet-overlay" class="import-wallet-overlay" role="dialog" aria-modal="true" aria-labelledby="import-wallet-title">
+      <div class="dialog">
+        <h2 id="import-wallet-title">Import this private key wallet into MetaMask?</h2>
+        <p class="subtitle" id="import-wallet-subtitle">
+          This will reveal the NPC's operator wallet private key so you can import it into MetaMask and manage its funds directly.
+        </p>
+
+        <div class="npc-info">
+          <div class="label">NPC</div>
+          <div id="import-wallet-npcname">—</div>
+          <div class="label">Address</div>
+          <div id="import-wallet-address">—</div>
+        </div>
+
+        <div class="warn">
+          ⚠️ MetaMask does not support programmatic private key import for security reasons. Clicking Confirm will reveal the private key with a Copy button and manual import steps. Never share this private key with anyone.
+        </div>
+
+        <div class="pk-row">
+          <div class="pk-value" id="import-wallet-pk">—</div>
+          <button type="button" class="pk-copy" id="import-wallet-copy">Copy</button>
+        </div>
+
+        <div class="steps">
+          <strong>Import into MetaMask:</strong>
+          <ol>
+            <li>Click your address at the <strong>top-left</strong> of the MetaMask popup to open the account list.</li>
+            <li>Scroll to the bottom of that panel and click <strong>Add wallet</strong>.</li>
+            <li>Choose <strong>Import a wallet</strong> (private key), paste the key above, and confirm.</li>
+            <li>Once imported, switch to the new account to manage the NPC's operator wallet directly from MetaMask.</li>
+          </ol>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="btn-cancel" id="import-wallet-cancel">Cancel</button>
+          <button type="button" class="btn-confirm" id="import-wallet-confirm">Confirm</button>
+        </div>
+      </div>
     </div>
 
     <!-- ====== right sidebar: leaderboard ====== -->
@@ -1367,6 +1607,103 @@
     let walletProvider = window.ethereum;
     let currentAddress = null;
 
+    // Hardcoded Arc Testnet metadata. Used as fallback when cfg.chainId
+    // hasn't been populated yet (RPC probe still in flight or Unity hasn't
+    // pushed the dashboard config), and as the canonical wallet_addEthereumChain
+    // payload when the user's wallet doesn't have Arc Testnet installed.
+    const ARC_CHAIN_ID_DEFAULT = 5042002;
+    const ARC_CHAIN_PARAMS = {
+      chainId: '0x' + ARC_CHAIN_ID_DEFAULT.toString(16),
+      chainName: 'Arc Testnet',
+      rpcUrls: ['https://rpc.testnet.arc.network'],
+      nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 6 },
+      blockExplorerUrls: ['https://testnet.arcscan.app'],
+    };
+
+    function getExpectedChainId() {
+      return Number(cfg.chainId) || ARC_CHAIN_ID_DEFAULT;
+    }
+
+    // Switch (or add) the wallet to the chain the game runs on. Without this,
+    // a freshly-installed MetaMask sits on Ethereum mainnet and every
+    // eth_sendTransaction post-login lands on 0x1 — charging ETH for gas
+    // instead of Arc's USDC native gas token.
+    async function ensureWalletOnExpectedChain() {
+      if (!walletProvider) return;
+      const expected = getExpectedChainId();
+      if (!expected) return;
+      const expectedHex = '0x' + expected.toString(16);
+      let currentHex = '';
+      try {
+        currentHex = await walletProvider.request({ method: 'eth_chainId' });
+      } catch (err) {
+        throw new Error(`Failed to read wallet chain id: ${err?.message ?? err}`);
+      }
+      if (currentHex && Number.parseInt(currentHex, 16) === expected) return;
+
+      const chainParams = {
+        ...ARC_CHAIN_PARAMS,
+        chainId: expectedHex,
+        rpcUrls: cfg.rpcUrl ? [cfg.rpcUrl] : ARC_CHAIN_PARAMS.rpcUrls,
+      };
+
+      try {
+        await walletProvider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: expectedHex }],
+        });
+      } catch (err) {
+        const code = err?.code ?? err?.data?.originalError?.code;
+        const msg = err?.message ?? '';
+        // 4902 = unrecognized chain. Some wallets nest it under data.originalError.
+        if (code === 4902 || /Unrecognized chain|wallet_addEthereumChain|add the chain/i.test(msg)) {
+          await walletProvider.request({
+            method: 'wallet_addEthereumChain',
+            params: [chainParams],
+          });
+          // Some wallets auto-switch after add; others don't. Retry but tolerate
+          // failure since the verify step below catches a non-switch.
+          try {
+            await walletProvider.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: expectedHex }],
+            });
+          } catch (_) {}
+        } else if (code === 4001) {
+          throw new Error('You rejected the chain switch. Please switch to Arc Testnet in MetaMask, then reconnect.');
+        } else {
+          throw err;
+        }
+      }
+
+      try {
+        const verifyHex = await walletProvider.request({ method: 'eth_chainId' });
+        if (Number.parseInt(verifyHex, 16) !== expected) {
+          throw new Error(`Wallet is still on chain ${Number.parseInt(verifyHex, 16)} after switch; expected ${expected} (Arc Testnet).`);
+        }
+      } catch (err) {
+        if (typeof err?.message === 'string' && err.message.includes('still on chain')) throw err;
+      }
+    }
+
+    // Force MetaMask to re-show the account picker. After a sign-out the
+    // previous account stays "permitted", so bare eth_requestAccounts returns
+    // it silently — even if the user has since switched accounts in MetaMask.
+    // wallet_requestPermissions always prompts.
+    async function requestAccountsWithPicker() {
+      try {
+        await walletProvider.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        });
+      } catch (err) {
+        if (err?.code === 4001) throw err;
+        // Fall back to eth_requestAccounts for wallets that don't implement
+        // wallet_requestPermissions.
+      }
+      return walletProvider.request({ method: 'eth_requestAccounts' });
+    }
+
     // Lock the header buttons + render a "Signed in" pill whenever there is a
     // valid cached SIWE session. The previous code only flipped the connect
     // button's *label* to "Connected" while leaving it clickable, and left the
@@ -1470,11 +1807,13 @@
       btnConnect.disabled = true;
       setStatus('Requesting wallet connection…', '');
       try {
-        const accounts = await walletProvider.request({ method: 'eth_requestAccounts' });
+        const accounts = await requestAccountsWithPicker();
         if (!Array.isArray(accounts) || accounts.length === 0) throw new Error('wallet returned no accounts');
-        // Wallet account connected but not yet signed in — flip Sign In on,
-        // keep Connect "Connected" but unlocked-look since the SIWE step is
-        // what truly locks the session.
+        // Switch to Arc Testnet BEFORE we light up Sign In. Otherwise a wallet
+        // still on Ethereum mainnet would sign a SIWE that mentions Arc but
+        // every later eth_sendTransaction would land on 0x1 and charge ETH.
+        setStatus('Switching wallet to Arc Testnet…', '');
+        await ensureWalletOnExpectedChain();
         currentAddress = accounts[0];
         addrEl.textContent = currentAddress;
         addressLabel.textContent = shortenAddr(currentAddress);
@@ -1483,7 +1822,7 @@
         btnSign.disabled = false;
         btnSign.textContent = 'Sign In';
         btnConnect.textContent = 'Connected';
-        setStatus('Wallet connected. Click "Sign In" to authenticate this session.', 'ok');
+        setStatus('Wallet connected on Arc Testnet. Click "Sign In" to authenticate this session.', 'ok');
       } catch (err) {
         console.error(err);
         setStatus(`Connection failed: ${err?.message ?? err}`, 'err');
@@ -1496,6 +1835,9 @@
       btnSign.disabled = true;
       setStatus('Awaiting SIWE signature…', '');
       try {
+        // Re-confirm chain just before signing — the user may have flipped
+        // chains in MetaMask between Connect and Sign.
+        await ensureWalletOnExpectedChain();
         const nonce = (cfg.nonce ?? cryptoRandomNonce());
         nonceEl.textContent = nonce;
         const issuedAt = new Date().toISOString();
@@ -1535,10 +1877,23 @@
       }
     });
 
-    btnSignout?.addEventListener('click', () => {
+    btnSignout?.addEventListener('click', async () => {
       // Manual sign-out is the explicit user-driven path. accountsChanged /
       // chainChanged use the same clear function, just without UI feedback.
       clearBrowserWalletSession();
+      // Revoke MetaMask's cached "permitted accounts" grant so the next
+      // Connect re-prompts the account picker. Without this, if the user
+      // switches accounts in MetaMask after signing out, eth_requestAccounts
+      // silently returns the previously-permitted account instead of the
+      // newly active one.
+      if (walletProvider?.request) {
+        try {
+          await walletProvider.request({
+            method: 'wallet_revokePermissions',
+            params: [{ eth_accounts: {} }],
+          });
+        } catch (_) { /* older wallets don't expose this RPC — picker fallback covers it */ }
+      }
       setStatus('Signed out. Connect and sign in again to resume.', '');
     });
 
@@ -2107,6 +2462,115 @@
       catch (err) { console.warn('[bootstrap] pending dashboard config apply failed', err); }
       delete window.__pendingArcDashboardConfig;
     }
+
+    // ---- Import-wallet button + modal (Unity → HTML) ----
+    // When a player clicks an NPC in-game, Unity calls ArcImportWallet_Show(json)
+    // with that NPC's operator wallet. We surface a floating button; clicking
+    // it opens a confirm modal, and confirm reveals the PK + copy + steps.
+    // The PK only enters the DOM after explicit user confirmation.
+    (function wireImportWalletModal() {
+      const btn = document.getElementById('btn-import-wallet');
+      const btnName = document.getElementById('btn-import-wallet-name');
+      const overlay = document.getElementById('import-wallet-overlay');
+      const nameEl = document.getElementById('import-wallet-npcname');
+      const addrEl = document.getElementById('import-wallet-address');
+      const pkEl = document.getElementById('import-wallet-pk');
+      const copyBtn = document.getElementById('import-wallet-copy');
+      const cancelBtn = document.getElementById('import-wallet-cancel');
+      const confirmBtn = document.getElementById('import-wallet-confirm');
+      if (!btn || !overlay) return;
+
+      // Current NPC payload — never written to localStorage so the PK doesn't
+      // outlive the in-game selection.
+      let currentPayload = null;
+
+      function openConfirmDialog() {
+        if (!currentPayload) return;
+        nameEl.textContent = currentPayload.npcName || '—';
+        addrEl.textContent = currentPayload.address || '—';
+        pkEl.textContent = '—';
+        copyBtn.textContent = 'Copy';
+        overlay.classList.remove('show-key');
+        overlay.classList.add('is-open');
+      }
+      function closeDialog() {
+        overlay.classList.remove('is-open');
+        overlay.classList.remove('show-key');
+        // Clear the PK text from the DOM so an accidental future open doesn't
+        // leak a stale key from a previously-selected NPC.
+        pkEl.textContent = '—';
+      }
+      function revealKey() {
+        if (!currentPayload || !currentPayload.privateKey) {
+          pkEl.textContent = '(private key not available — please re-select the NPC)';
+        } else {
+          pkEl.textContent = currentPayload.privateKey;
+        }
+        overlay.classList.add('show-key');
+      }
+      async function copyPk() {
+        if (!currentPayload || !currentPayload.privateKey) return;
+        try {
+          await navigator.clipboard.writeText(currentPayload.privateKey);
+          copyBtn.textContent = 'Copied';
+          setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1600);
+        } catch (err) {
+          // Fallback: select the text so the user can Ctrl+C manually.
+          const range = document.createRange();
+          range.selectNodeContents(pkEl);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          copyBtn.textContent = 'Press Ctrl+C';
+        }
+      }
+
+      btn.addEventListener('click', openConfirmDialog);
+      cancelBtn.addEventListener('click', closeDialog);
+      confirmBtn.addEventListener('click', revealKey);
+      copyBtn.addEventListener('click', copyPk);
+      // Click outside dialog (on backdrop) closes — but clicks inside .dialog
+      // bubble out of overlay so guard with currentTarget check.
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeDialog();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && overlay.classList.contains('is-open')) closeDialog();
+      });
+
+      // Public API — Unity calls these via the ArcImportWallet_Show/Hide jslib externs.
+      window.installArcImportWallet = function (payload) {
+        if (!payload || typeof payload !== 'object') return;
+        currentPayload = {
+          npcName: String(payload.npcName ?? ''),
+          address: String(payload.address ?? ''),
+          privateKey: String(payload.privateKey ?? ''),
+        };
+        btnName.textContent = currentPayload.npcName || 'NPC';
+        btn.classList.add('is-visible');
+        // If the modal is currently open for a previous NPC, refresh its
+        // displayed metadata in place rather than closing it.
+        if (overlay.classList.contains('is-open')) {
+          nameEl.textContent = currentPayload.npcName || '—';
+          addrEl.textContent = currentPayload.address || '—';
+          if (overlay.classList.contains('show-key')) {
+            pkEl.textContent = currentPayload.privateKey || '—';
+          }
+        }
+      };
+      window.hideArcImportWallet = function () {
+        currentPayload = null;
+        btn.classList.remove('is-visible');
+        closeDialog();
+      };
+
+      // Pick up payload that Unity pushed before this script ran.
+      if (window.__pendingArcImportWallet) {
+        try { window.installArcImportWallet(window.__pendingArcImportWallet); }
+        catch (err) { console.warn('[bootstrap] pending import-wallet payload apply failed', err); }
+        window.__pendingArcImportWallet = null;
+      }
+    })();
 
     (function bootDashboard() {
       // Render any cached priceHistory immediately — even without a live RPC
