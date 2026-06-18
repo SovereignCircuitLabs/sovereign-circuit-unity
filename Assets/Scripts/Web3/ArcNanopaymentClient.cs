@@ -128,8 +128,10 @@ namespace ArcTrading.Nanopayment
 
                 if (probe.responseCode != 402)
                 {
+                    var probeBody = probe.downloadHandler != null ? probe.downloadHandler.text : null;
+                    var detail = !string.IsNullOrEmpty(probeBody) ? probeBody : probe.error;
                     throw new InvalidOperationException(
-                        $"[ArcNanopayment] Unexpected status {probe.responseCode} on probe: {probe.error}");
+                        $"[ArcNanopayment] Unexpected status {probe.responseCode} (result={probe.result}) on probe ({url}): {detail}");
                 }
 
                 // Step 2 — Capture the 402 response and parse the PAYMENT-REQUIRED header encoded as Base64(JSON)

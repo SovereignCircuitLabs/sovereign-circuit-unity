@@ -1149,7 +1149,7 @@ public class ArcTradingContractClient : MonoBehaviour
         if (initialUsdcCapital <= 0f) return;
 
         var target = (decimal)initialUsdcCapital;
-        var currentNpcBalance = await GetWalletBalanceUSDCAsync();
+        var currentNpcBalance = await GetWalletBalanceUSDCAsync() + await GetGatewayAvailableBalanceUSDCAsync();
         if (currentNpcBalance >= target)
         {
             Debug.Log($"[{name}] initial capital OK: wallet has {currentNpcBalance} USDC (target {target}).");

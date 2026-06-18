@@ -52,6 +52,31 @@
       --side-w: clamp(260px, 20vw, 320px);
       --gutter: 10px;
     }
+    /* "Focus mode": when the user collapses the side panels with the toggle
+       button, the grid drops the left/right columns and the Unity stage
+       expands to fill the full viewport width (minus shell gutter). The
+       header / footer / log console keep their layout — only the stage row
+       reshapes. */
+    body.panels-collapsed #app-shell {
+      /* Drop the left/right columns but keep header + footer rows so the
+         wallet buttons and RPC pills stay reachable. Padding/gap are zeroed
+         so the stage row spans 100vw and the 16:9-locked Unity container
+         gets the widest possible derived size. */
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "header"
+        "stage"
+        "footer";
+      padding: 0;
+      gap: 0;
+    }
+    body.panels-collapsed #ui-left,
+    body.panels-collapsed #ui-right,
+    body.panels-collapsed #page-log-console { display: none; }
+    body.panels-collapsed #ui-header,
+    body.panels-collapsed #ui-footer { border-radius: 0; }
+    body.panels-collapsed #unity-stage { overflow: hidden; }
+    body.panels-collapsed #unity-container { border-radius: 0; }
     html { height: 100%; }
     body {
       margin: 0; padding: 0;
@@ -281,6 +306,35 @@
       box-shadow: 0 0 0 1px var(--border), 0 12px 40px rgba(0,0,0,.45);
     }
     #unity-canvas { width: 100%; height: 100%; background: #000; display: block; }
+
+    /* Focus-mode toggle pinned to the top-right of the Unity stage. Lets the
+       player hide the side panels so the engine can stretch to ~100vw — which
+       in turn lifts CanvasScaler.scaleFactor and makes UGUI text noticeably
+       sharper. Sits above the canvas so it stays clickable while the game is
+       running. */
+    #btn-focus-toggle {
+      position: absolute;
+      top: 10px; right: 10px;
+      z-index: 5;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .04em;
+      border-radius: 999px;
+      border: 1px solid rgba(102,178,255,.4);
+      background: rgba(11,13,18,.72);
+      color: var(--accent-2);
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      transition: background .15s, border-color .15s, box-shadow .15s;
+    }
+    #btn-focus-toggle:hover {
+      background: rgba(11,13,18,.92);
+      border-color: rgba(102,178,255,.7);
+      box-shadow: 0 0 12px rgba(102,178,255,.25);
+    }
+    #btn-focus-toggle svg { width: 12px; height: 12px; flex: 0 0 auto; }
     #unity-loading-bar {
       position: absolute; left: 50%; top: 50%;
       transform: translate(-50%, -50%); text-align: center;
@@ -396,10 +450,8 @@
     /* ---- web runtime console (mirrors Unity RuntimeLogConsole) ---- */
     #page-log-console {
       /* Bigger top margin so the testnet-notice in #ui-footer reads as a
-         separate bar above this panel rather than touching it. The previous
-         0 top margin only left the #app-shell padding (10px) between them,
-         which visually merged the two panels. */
-      margin: 22px var(--gutter) var(--gutter) var(--gutter);
+         clearly separate bar above this panel rather than touching it. */
+      margin: 56px var(--gutter) var(--gutter) var(--gutter);
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
@@ -702,6 +754,14 @@
           <div id="boot-status">Loading crypto bridge…</div>
         </div>
       </div>
+      <button id="btn-focus-toggle" type="button" title="Hide side panels so the game stage expands to full width — text gets sharper.">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"
+                stroke="currentColor" stroke-width="2.2"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span id="focus-toggle-label">Focus mode</span>
+      </button>
     </div>
 
     <!-- ====== right sidebar: leaderboard ====== -->
@@ -854,16 +914,21 @@
         }
       }
 
-      // Only show Unity-side Debug.Log output. The convention across this repo
-      // is that those lines carry at least one [Tag] / [Namespace.Method]
-      // bracketed prefix (e.g. [WebGLChainApi.GetTbaItemBalancesAsync],
-      // [NpcPaymentWalletService], [ArcNanopayment]). Plain browser-side
-      // console.log noise (esm.sh module banners, viem traces, etc.) is
-      // dropped on the floor — it still goes to the DevTools console via the
-      // original handlers, just not to the on-page panel.
-      var BRACKETED_TAG_RE = /\[[^\]\r\n]+\]/;
+      // Only surface NPC-trading-related Unity output on the page panel.
+      // The DevTools console still gets everything via the original handlers
+      // (we don't suppress upstream), but the on-page log stays focused on
+      // the events a player actually cares about: NPC decisions, USDC moves,
+      // nanopayment signing, and payment-wallet binding. Everything else
+      // (boot, login, wallet bridge, WebGL chain API, etc.) is filtered out.
+      //
+      // Match either a known bracketed tag OR a free-form keyword that the
+      // existing logs use (BuyNFT / SellNFT / Deposit / Withdraw / payment
+      // wallet …) so we still catch lines whose tag is dynamic, like the
+      // archetype-based [BalancedTrader] / [AggressiveSpeculator] prefixes.
+      var NPC_TRADING_TAG_RE = /\[(ArcTradingContractClient|ArcNanopayment|ArcNanopaymentGatewayWallet|NpcPaymentWalletService|NpcPaymentKeyVault|TraderNpc|TradingNpcActor|ConservativeSaver|BalancedTrader|AggressiveSpeculator|MacroAgent(?:\.[^\]]+)?)\]/;
+      var NPC_TRADING_KEYWORD_RE = /\b(BuyNFT|SellNFT|Deposit|Withdraw|nanopayment|payment wallet|Payment wallet)\b/;
       function isUnityTaggedLine(msg) {
-        return BRACKETED_TAG_RE.test(msg);
+        return NPC_TRADING_TAG_RE.test(msg) || NPC_TRADING_KEYWORD_RE.test(msg);
       }
 
       function append(level, args) {
@@ -1009,18 +1074,62 @@
       const stageW = unityStageEl.clientWidth;
       const stageH = unityStageEl.clientHeight;
       if (!stageW || !stageH) return;
+      // Lock to 16:9 so the in-game camera framing and the UI Canvas's
+      // reference resolution stay correct. Focus mode does NOT change this —
+      // it just hides the header/footer/panels so the stage row gets the
+      // full viewport height, which makes the 16:9-derived width as large
+      // as the screen physically allows.
       const width = Math.floor(Math.min(stageW, stageH * 16 / 9));
       const height = Math.floor(width * 9 / 16);
       unityContainerEl.style.width = `${width}px`;
       unityContainerEl.style.height = `${height}px`;
-      if (unityInstanceRef?.Module?.setCanvasSize) {
-        const dpr = window.devicePixelRatio || 1;
-        unityInstanceRef.Module.setCanvasSize(Math.floor(width * dpr), Math.floor(height * dpr));
+      // Mirror the floor we set in unityConfig so monitor swaps don't drop
+      // Unity back to 1× on a 100%-scaled external screen.
+      const dpr = Math.max(window.devicePixelRatio || 1, 2);
+      if (unityInstanceRef?.Module) {
+        // Keep Unity's internal dpr in sync when the window moves between
+        // monitors with different pixel densities (1× external + 2× retina).
+        // matchWebGLToCanvasSize then rescales the backbuffer on the next
+        // frame so text glyphs stay rasterised at native resolution.
+        unityInstanceRef.Module.devicePixelRatio = dpr;
+        if (unityInstanceRef.Module.setCanvasSize) {
+          unityInstanceRef.Module.setCanvasSize(Math.floor(width * dpr), Math.floor(height * dpr));
+        }
       }
     }
     resizeUnityViewport();
     window.addEventListener('resize', resizeUnityViewport);
     if (window.ResizeObserver) new ResizeObserver(resizeUnityViewport).observe(unityStageEl);
+
+    // ---- focus mode (hide side panels for max stage width) ----
+    // Persisted in localStorage so the user's last choice survives reloads.
+    // Toggling the class triggers ResizeObserver above, which re-runs
+    // resizeUnityViewport and tells Unity to re-rasterise at the larger size.
+    (function wireFocusToggle() {
+      const btn = document.getElementById('btn-focus-toggle');
+      const label = document.getElementById('focus-toggle-label');
+      if (!btn || !label) return;
+      const STORAGE_KEY = 'arc_panels_collapsed_v1';
+      const apply = (collapsed) => {
+        document.body.classList.toggle('panels-collapsed', collapsed);
+        label.textContent = collapsed ? 'Show panels' : 'Focus mode';
+      };
+      let saved = false;
+      try { saved = localStorage.getItem(STORAGE_KEY) === '1'; } catch (_) {}
+      apply(saved);
+      btn.addEventListener('click', () => {
+        const next = !document.body.classList.contains('panels-collapsed');
+        apply(next);
+        try { localStorage.setItem(STORAGE_KEY, next ? '1' : '0'); } catch (_) {}
+      });
+    })();
+    // Some browsers fire a `resize` on devicePixelRatio change, but Safari /
+    // Firefox do not — listen explicitly so dragging between a retina laptop
+    // screen and an external monitor still updates Unity's render scale.
+    if (window.matchMedia) {
+      const dprQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+      dprQuery.addEventListener?.('change', resizeUnityViewport);
+    }
 
     window.__arcOnPublicRpcConfigured = refreshRuntimeChainInfo;
     installPublicRpcFallback();
@@ -2040,6 +2149,17 @@
       companyName: '{{{ COMPANY_NAME }}}',
       productName: '{{{ PRODUCT_NAME }}}',
       productVersion: '{{{ PRODUCT_VERSION }}}',
+      // Force a >=2 device-pixel-ratio so Unity's Screen.width reports the
+      // backbuffer (cssWidth × dpr) at a high enough resolution that the
+      // CanvasScaler's scaleFactor matches what we get on a Windows
+      // full-screen build. With a plain `window.devicePixelRatio` we kept
+      // ending up at dpr=1 on 100%-scaling laptops, which makes UGUI dynamic
+      // font atlases bake glyphs at the (already-squeezed) CSS size and the
+      // text reads soft. Most of the game's UI is text, so we eat the 4×
+      // fill-rate cost for crisp glyphs. Drop the floor to 1 if you hit fps
+      // problems on a low-end browser.
+      devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
+      matchWebGLToCanvasSize: true,
       showBanner: undefined,
     };
     const unityCanvasEl = document.querySelector('#unity-canvas');

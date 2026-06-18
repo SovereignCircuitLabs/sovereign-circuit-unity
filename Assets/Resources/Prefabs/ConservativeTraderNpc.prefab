@@ -529,7 +529,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ade8ba009ed9b9240ae65de4db56ad55, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  x402ServerBaseUrl: http://localhost:4021/item/
+  x402ServerBaseUrl: https://sovereign-circuit-server-production.up.railway.app/item/
   maxNanopaymentUsdc: 5
   fallbackChainId: 5042002
   httpTimeoutSeconds: 20
