@@ -1521,6 +1521,12 @@
         requestAccounts() {
           return startAsync(ensureEth().then(eth => eth.request({ method: 'eth_requestAccounts' })));
         },
+        getAccounts() {
+          // Silent read of currently-permitted accounts. No popup. Used by
+          // the WebGL pre-flight before eth_sendTransaction to detect a
+          // stale Unity-side SIWE session vs. real MetaMask permissions.
+          return startAsync(ensureEth().then(eth => eth.request({ method: 'eth_accounts' })));
+        },
         personalSign(message, address) {
           return startAsync(
             ensureEth().then(eth => eth.request({ method: 'personal_sign', params: [message, address] })),
@@ -1798,8 +1804,8 @@
       });
     }
     if (walletProvider?.on) {
-      walletProvider.on('accountsChanged', () => clearBrowserWalletSession());
-      walletProvider.on('chainChanged', () => clearBrowserWalletSession());
+      walletProvider.on('accountsChanged', () => clearBrowserWalletSession('accountsChanged'));
+      walletProvider.on('chainChanged', () => clearBrowserWalletSession('chainChanged'));
     }
 
     btnConnect.addEventListener('click', async () => {
@@ -1880,7 +1886,7 @@
     btnSignout?.addEventListener('click', async () => {
       // Manual sign-out is the explicit user-driven path. accountsChanged /
       // chainChanged use the same clear function, just without UI feedback.
-      clearBrowserWalletSession();
+      clearBrowserWalletSession('signout');
       // Revoke MetaMask's cached "permitted accounts" grant so the next
       // Connect re-prompts the account picker. Without this, if the user
       // switches accounts in MetaMask after signing out, eth_requestAccounts
@@ -1925,11 +1931,26 @@
       try { localStorage.setItem(WALLET_SESSION_KEY, JSON.stringify(session)); } catch (_) {}
       try { window.ArcTradingMetamaskBridge?.cacheSession?.(session); } catch (_) {}
     }
-    function clearBrowserWalletSession() {
+    function clearBrowserWalletSession(reason) {
       window.__arcWalletSession = null;
       window.__arcLastSiwe = null;
       try { localStorage.removeItem(WALLET_SESSION_KEY); } catch (_) {}
       try { window.ArcTradingMetamaskBridge?.clearCachedSession?.(); } catch (_) {}
+      // Mirror the clear into Unity so WalletLoginService.Current stops handing
+      // out a stale wallet address to eth_sendTransaction (which would 4100).
+      // Guarded by unityInstance because accountsChanged can fire before the
+      // build is loaded, and we'd silently swallow the error otherwise.
+      try {
+        if (window.unityInstance) {
+          window.unityInstance.SendMessage(
+            'WalletLoginService',
+            'OnBrowserWalletSessionCleared',
+            String(reason ?? 'unknown'),
+          );
+        }
+      } catch (err) {
+        console.warn('[wallet] failed to forward session-cleared to Unity', err);
+      }
       // applyWalletSessionState(null) flips the buttons + badge back to the
       // unsigned-in state and sets the default "Wallet detected" message.
       // For accountsChanged / chainChanged transitions we then overwrite the

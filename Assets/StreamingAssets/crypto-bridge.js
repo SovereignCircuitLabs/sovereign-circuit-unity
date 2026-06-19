@@ -277,6 +277,13 @@ window.ArcTradingMetamaskBridge = {
     return startAsync(ensureEthereum().then((eth) => eth.request({ method: 'eth_requestAccounts' })))
   },
 
+  // Silent read of currently-permitted accounts via eth_accounts. Used by
+  // WebGL pre-flight before eth_sendTransaction to detect a stale Unity-side
+  // SIWE session vs. real MetaMask permissions. Never pops a popup.
+  getAccounts () {
+    return startAsync(ensureEthereum().then((eth) => eth.request({ method: 'eth_accounts' })))
+  },
+
   personalSign (message, address) {
     return startAsync(
       ensureEthereum().then((eth) => eth.request({ method: 'personal_sign', params: [message, address] })),

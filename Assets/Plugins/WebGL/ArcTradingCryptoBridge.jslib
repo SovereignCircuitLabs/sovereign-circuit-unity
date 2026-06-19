@@ -217,6 +217,16 @@ mergeInto(LibraryManager.library, {
     return ptr;
   },
 
+  ArcMm_GetAccounts: function () {
+    var b = window.ArcTradingMetamaskBridge;
+    var out = b && b.getAccounts ? b.getAccounts()
+      : JSON.stringify({ error: 'metamaskBridge.getAccounts not installed' });
+    var sz = lengthBytesUTF8(out) + 1;
+    var ptr = _malloc(sz);
+    stringToUTF8(out, ptr, sz);
+    return ptr;
+  },
+
   ArcMm_PersonalSign: function (msgPtr, addrPtr) {
     var b = window.ArcTradingMetamaskBridge;
     var msg = UTF8ToString(msgPtr);

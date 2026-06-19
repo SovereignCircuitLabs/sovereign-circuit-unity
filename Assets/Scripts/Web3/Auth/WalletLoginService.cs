@@ -376,6 +376,19 @@ namespace ArcTrading.Auth
         }
 
         /// <summary>
+        /// Called from the WebGL HTML template whenever the browser-side wallet
+        /// session is cleared — fires on accountsChanged, chainChanged, or the
+        /// manual Sign Out button. Without this Unity would keep handing out a
+        /// stale Current.wallet to eth_sendTransaction and MetaMask would reply
+        /// 4100 ("requested account ... not authorized").
+        /// </summary>
+        public void OnBrowserWalletSessionCleared(string reason)
+        {
+            Debug.Log($"[WalletLoginService] browser cleared SIWE session (reason={reason ?? "unknown"}); calling Logout()");
+            Logout();
+        }
+
+        /// <summary>
         /// Submit an unsigned tx through the active bridge. Requires that
         /// EnsureLoggedInAsync was previously called with persistentBridge=true and
         /// the browser tab is still open.
@@ -392,6 +405,30 @@ namespace ArcTrading.Auth
                     "[WalletLoginService] no valid SIWE session. Call EnsureLoggedInAsync first.");
             if (req == null) throw new ArgumentNullException(nameof(req));
             if (string.IsNullOrEmpty(req.from)) req.from = Current.wallet;
+
+            // Pre-flight: MetaMask returns EIP-1193 4100 ("requested account
+            // not authorized") if req.from drifted out of the currently-
+            // permitted account set — e.g. user switched accounts in MM after
+            // SIWE, or revoked the site's permission without us hearing about
+            // it (extension reload, browser site-data clear). eth_accounts is
+            // a silent read, so this never pops a popup.
+            var permitted = await WebGLMetamaskBridge.GetAccountsAsync(ct).ConfigureAwait(true);
+            var fromLower = (req.from ?? string.Empty).ToLowerInvariant();
+            bool authorized = false;
+            for (int i = 0; i < permitted.Length; i++)
+            {
+                if (string.Equals(permitted[i], fromLower, StringComparison.Ordinal)) { authorized = true; break; }
+            }
+            if (!authorized)
+            {
+                // Drop the stale Unity-side session so the next user action
+                // restarts the SIWE flow against the current MetaMask state.
+                var permittedJoined = permitted.Length == 0 ? "<none>" : string.Join(",", permitted);
+                Logout();
+                throw new InvalidOperationException(
+                    $"[WalletLoginService] MetaMask no longer authorizes {fromLower} for this site " +
+                    $"(currently permitted: {permittedJoined}). Reconnect via the header Sign In button.");
+            }
 
             // eth_sendTransaction params: { from, to, value, data, gas? }.
             // chainId / id / label are Unity-side fields; not part of the RPC.

@@ -20,6 +20,7 @@ namespace ArcTrading.Crypto
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
         [DllImport("__Internal")] private static extern string ArcMm_RequestAccounts();
+        [DllImport("__Internal")] private static extern string ArcMm_GetAccounts();
         [DllImport("__Internal")] private static extern string ArcMm_PersonalSign(string message, string address);
         [DllImport("__Internal")] private static extern string ArcMm_SendTransaction(string txJson);
         [DllImport("__Internal")] private static extern string ArcMm_ChainId();
@@ -28,6 +29,7 @@ namespace ArcTrading.Crypto
         [DllImport("__Internal")] private static extern string ArcMm_PollRequest(string id);
 #else
         private static string ArcMm_RequestAccounts() => throw new PlatformNotSupportedException("WebGL-only");
+        private static string ArcMm_GetAccounts() => throw new PlatformNotSupportedException("WebGL-only");
         private static string ArcMm_PersonalSign(string _, string __) => throw new PlatformNotSupportedException("WebGL-only");
         private static string ArcMm_SendTransaction(string _) => throw new PlatformNotSupportedException("WebGL-only");
         private static string ArcMm_ChainId() => throw new PlatformNotSupportedException("WebGL-only");
@@ -42,6 +44,18 @@ namespace ArcTrading.Crypto
             var raw = await WebGLAsyncBridge.AwaitAsync(id, ArcMm_PollRequest, ct).ConfigureAwait(true);
             // raw is JSON-stringified array: ["0xabc...", "0xdef..."]
             return ExtractFirstAddress(raw);
+        }
+
+        /// <summary>
+        /// Silent read of currently-permitted accounts via eth_accounts.
+        /// Returns lowercase 0x-prefixed addresses. Empty array means MetaMask
+        /// has no active permission for this site (or it was revoked).
+        /// </summary>
+        public static async Task<string[]> GetAccountsAsync(CancellationToken ct = default)
+        {
+            var id = ArcMm_GetAccounts();
+            var raw = await WebGLAsyncBridge.AwaitAsync(id, ArcMm_PollRequest, ct).ConfigureAwait(true);
+            return ExtractAllAddresses(raw);
         }
 
         public static async Task<string> PersonalSignAsync(string message, string address, CancellationToken ct = default)
@@ -99,6 +113,28 @@ namespace ArcTrading.Crypto
             if (start < 0 || end < 0 || end <= start + 1)
                 throw new InvalidOperationException($"MetaMask returned no accounts: {jsonArray}");
             return jsonArray.Substring(start + 1, end - start - 1);
+        }
+
+        private static readonly string[] EmptyAddresses = new string[0];
+
+        private static string[] ExtractAllAddresses(string jsonArray)
+        {
+            // Stringified array: ["0xabc","0xdef"] or []. Empty list is a legal
+            // "no permission" answer for eth_accounts — caller treats that as
+            // a session-cleared signal rather than an error.
+            if (string.IsNullOrEmpty(jsonArray)) return EmptyAddresses;
+            var addrs = new System.Collections.Generic.List<string>();
+            int i = 0;
+            while (i < jsonArray.Length)
+            {
+                int start = jsonArray.IndexOf('"', i);
+                if (start < 0) break;
+                int end = jsonArray.IndexOf('"', start + 1);
+                if (end < 0 || end <= start + 1) break;
+                addrs.Add(jsonArray.Substring(start + 1, end - start - 1).ToLowerInvariant());
+                i = end + 1;
+            }
+            return addrs.ToArray();
         }
     }
 }
