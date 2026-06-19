@@ -80,7 +80,8 @@ public class NpcListingRow : MonoBehaviour
         if (listingStatusLabel != null)
         {
             listingStatusLabel.text = info.IsListed
-                ? $"Listed @ {ToUsdc(info.ListedMinPrice):0.######} USDC min"
+                // ? $"Listed @ {ToUsdc(info.ListedMinPrice):0.######} USDC min"
+                ? $"Listed for sale"
                 : "Not listed";
         }
 
