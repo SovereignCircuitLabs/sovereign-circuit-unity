@@ -11,8 +11,13 @@ using UnityEngine.UI;
 ///
 /// Right-side action is a single Button that flips meaning based on listing
 /// state:
-///   - not listed → "List for Sell" → invokes onList(info, minPrice)
+///   - not listed → "List for Sell" → invokes onList(info, 0)
 ///   - listed     → "Cancel Listing" → invokes onCancel(info)
+///
+/// minPrice is hardcoded to 0 — the marketplace clears at quoteNpcPrice on
+/// every fill, so a seller-set floor is pure noise to the player. The
+/// minPriceInput field is hidden at Bind time; parsing logic kept commented
+/// for fast revert if we ever expose a reserve price again.
 /// </summary>
 public class NpcListingRow : MonoBehaviour
 {
@@ -24,10 +29,10 @@ public class NpcListingRow : MonoBehaviour
     [SerializeField] private Text tbaValueLabel;
     [SerializeField] private Text listingStatusLabel;
 
-    [Header("Min price input")]
-    [Tooltip("USDC value (decimal, e.g. 12.5) the seller is willing to accept. " +
-             "Pre-filled with the current on-chain quote on Bind.")]
-    [SerializeField] private InputField minPriceInput;
+    // [Header("Min price input")]
+    // [Tooltip("USDC value (decimal, e.g. 12.5) the seller is willing to accept. " +
+    //          "Pre-filled with the current on-chain quote on Bind.")]
+    //[SerializeField] private InputField minPriceInput;
 
     [Header("Action")]
     [SerializeField] private Button actionButton;
@@ -79,15 +84,17 @@ public class NpcListingRow : MonoBehaviour
                 : "Not listed";
         }
 
-        // Pre-fill the input with the live quote so the player gets a sane default
-        // they can override. If the NPC is already listed, show the existing minPrice
-        // instead so they see what they previously committed to.
-        if (minPriceInput != null)
-        {
-            decimal defaultValue = info.IsListed ? ToUsdc(info.ListedMinPrice) : quotedUsdc;
-            minPriceInput.text = defaultValue.ToString("0.######");
-            minPriceInput.interactable = !info.IsListed;
-        }
+        // minPrice is hardcoded to 0 — hide the input entirely so the player
+        // never sees a reserve-price field. Keep the pre-fill logic commented
+        // for fast revert.
+        // if (minPriceInput != null)
+        //     minPriceInput.gameObject.SetActive(false);
+        // if (minPriceInput != null)
+        // {
+        //     decimal defaultValue = info.IsListed ? ToUsdc(info.ListedMinPrice) : quotedUsdc;
+        //     minPriceInput.text = defaultValue.ToString("0.######");
+        //     minPriceInput.interactable = !info.IsListed;
+        // }
 
         if (actionButtonLabel != null)
             actionButtonLabel.text = info.IsListed ? cancelLabelTemplate : listLabelTemplate;
@@ -102,8 +109,10 @@ public class NpcListingRow : MonoBehaviour
     public void SetInteractable(bool interactable)
     {
         if (actionButton != null) actionButton.interactable = interactable;
-        if (minPriceInput != null && cached != null && !cached.IsListed)
-            minPriceInput.interactable = interactable;
+        // minPriceInput is now permanently hidden (see Bind); no interactable
+        // gating needed.
+        // if (minPriceInput != null && cached != null && !cached.IsListed)
+        //     minPriceInput.interactable = interactable;
     }
 
     private void HandleActionClicked()
@@ -116,45 +125,47 @@ public class NpcListingRow : MonoBehaviour
             return;
         }
 
-        if (!TryReadMinPriceRaw(out var minPriceRaw))
-        {
-            Debug.LogWarning(
-                $"[NpcListingRow] tokenId={cached.TokenId} — invalid min price input " +
-                $"'{(minPriceInput != null ? minPriceInput.text : "<null>")}'.");
-            return;
-        }
+        // minPrice hardcoded to 0 — market clears at quoteNpcPrice on every fill.
+        onList?.Invoke(cached, BigInteger.Zero);
 
-        onList?.Invoke(cached, minPriceRaw);
+        // if (!TryReadMinPriceRaw(out var minPriceRaw))
+        // {
+        //     Debug.LogWarning(
+        //         $"[NpcListingRow] tokenId={cached.TokenId} — invalid min price input " +
+        //         $"'{(minPriceInput != null ? minPriceInput.text : "<null>")}'.");
+        //     return;
+        // }
+        // onList?.Invoke(cached, minPriceRaw);
     }
 
-    /// <summary>
-    /// Parse the input field as a decimal USDC value and convert to 6-decimal
-    /// uint256 raw units. Returns false on empty / unparseable / negative input.
-    /// </summary>
-    private bool TryReadMinPriceRaw(out BigInteger raw)
-    {
-        raw = BigInteger.Zero;
-        if (minPriceInput == null) return false;
-
-        var text = minPriceInput.text;
-        if (string.IsNullOrWhiteSpace(text)) return false;
-
-        if (!decimal.TryParse(
-                text,
-                System.Globalization.NumberStyles.Number,
-                System.Globalization.CultureInfo.InvariantCulture,
-                out var usdc))
-        {
-            return false;
-        }
-
-        if (usdc < 0) return false;
-
-        // 6-decimal USDC, round half-up to nearest base unit.
-        decimal scaled = decimal.Round(usdc * 1_000_000m, 0, MidpointRounding.AwayFromZero);
-        raw = new BigInteger(scaled);
-        return true;
-    }
+    // /// <summary>
+    // /// Parse the input field as a decimal USDC value and convert to 6-decimal
+    // /// uint256 raw units. Returns false on empty / unparseable / negative input.
+    // /// </summary>
+    // private bool TryReadMinPriceRaw(out BigInteger raw)
+    // {
+    //     raw = BigInteger.Zero;
+    //     if (minPriceInput == null) return false;
+    //
+    //     var text = minPriceInput.text;
+    //     if (string.IsNullOrWhiteSpace(text)) return false;
+    //
+    //     if (!decimal.TryParse(
+    //             text,
+    //             System.Globalization.NumberStyles.Number,
+    //             System.Globalization.CultureInfo.InvariantCulture,
+    //             out var usdc))
+    //     {
+    //         return false;
+    //     }
+    //
+    //     if (usdc < 0) return false;
+    //
+    //     // 6-decimal USDC, round half-up to nearest base unit.
+    //     decimal scaled = decimal.Round(usdc * 1_000_000m, 0, MidpointRounding.AwayFromZero);
+    //     raw = new BigInteger(scaled);
+    //     return true;
+    // }
 
     private static decimal ToUsdc(BigInteger rawValue)
     {

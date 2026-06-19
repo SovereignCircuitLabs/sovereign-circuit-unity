@@ -16,10 +16,11 @@ using UnityEngine.UI;
 ///   2. Enumerate NPCs owned by the signed-in wallet via
 ///      NpcMarketplaceClient.EnumerateOwnedForSaleAsync — each row carries
 ///      the on-chain quote, TBA value, and current listing state.
-///   3. On "List for Sell" click: read minPrice from the row's input field
-///      (USDC decimal → 6-decimal raw), submit listNpc via the bridge.
-///      NpcMarketplaceClient.ListNpcAsync handles the one-time
-///      setApprovalForAll on NpcCharacter.
+///   3. On "List for Sell" click: submit listNpc(tokenId, 0) via the bridge.
+///      minPrice is hardcoded to 0 — the market clears at quoteNpcPrice on
+///      every fill, so a seller-set floor is just noise. The row no longer
+///      surfaces a minPrice input. NpcMarketplaceClient.ListNpcAsync handles
+///      the one-time setApprovalForAll on NpcCharacter.
 ///   4. On "Cancel Listing" click (rows already listed): submit
 ///      cancelListing via the bridge.
 /// </summary>
@@ -241,6 +242,8 @@ public class NpcListingMenu : MonoBehaviour
         }
         if (info == null) return;
 
+        // minPriceRaw is always 0 from the row (see NpcListingRow). Kept in the
+        // callback signature for now in case we ever re-expose a reserve price.
         submitting = true;
         SetRowsInteractable(false);
         try
@@ -288,15 +291,20 @@ public class NpcListingMenu : MonoBehaviour
 
     private async Task ListAsync(OwnedNpcSellableInfo info, BigInteger minPriceRaw)
     {
+        // Force minPrice=0 here too — the row already passes 0, but pinning it
+        // at the menu boundary makes the intent obvious and guards against a
+        // future row-side regression silently leaking a non-zero floor.
+        var minPriceToSend = BigInteger.Zero;
+
         SetStatus(
-            $"Submitting listNpc(#{info.TokenId}) — minPrice {ToUsdc(minPriceRaw):0.######} USDC. " +
+            $"Submitting listNpc(#{info.TokenId}) — sells at market quote on fill. " +
             "Approve in MetaMask (first listing also asks for NFT approval)…",
             isError: false);
 
         var txHash = await marketplaceClient.ListNpcAsync(
-            info.TokenId, minPriceRaw, lifetimeCts.Token);
+            info.TokenId, minPriceToSend, lifetimeCts.Token);
         SetStatus($"Listed NPC #{info.TokenId}. tx: {txHash}", isError: false);
-        Debug.Log($"[NpcListingMenu] listNpc({info.TokenId}, {minPriceRaw}) tx={txHash}");
+        Debug.Log($"[NpcListingMenu] listNpc({info.TokenId}, minPrice=0) tx={txHash}");
 
         await RefreshAsync();
     }

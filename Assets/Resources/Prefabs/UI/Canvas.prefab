@@ -1524,6 +1524,31 @@ PrefabInstance:
       propertyPath: m_Name
       value: MarketPlace
       objectReference: {fileID: 0}
+    - target: {fileID: 3426714962386256115, guid: dce1f75a8217d2a498126b704ec45267,
+        type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3426714962386256115, guid: dce1f75a8217d2a498126b704ec45267,
+        type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3426714962386256115, guid: dce1f75a8217d2a498126b704ec45267,
+        type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4396195398349668651, guid: dce1f75a8217d2a498126b704ec45267,
+        type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4396195398349668651, guid: dce1f75a8217d2a498126b704ec45267,
+        type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 7559759138077327686, guid: dce1f75a8217d2a498126b704ec45267,
         type: 3}
       propertyPath: openPanelButton
