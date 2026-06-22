@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using ArcTrading.Auth;
+using Nethereum.Web3;
 using UnityEngine;
 using Vector3 = UnityEngine.Vector3;
 using Quaternion = UnityEngine.Quaternion;
@@ -25,6 +26,8 @@ public class OwnedNpcSpawner : MonoBehaviour
 {
     [Header("Chain")] [SerializeField] private NpcCharacterContractClient npcContract;
     [SerializeField] private NpcPaymentWalletService npcPaymentWalletService;
+    [SerializeField] private string marketplaceContractAddress;
+    [SerializeField] private string rpcUrl = "https://rpc.testnet.arc.network";
 
     [Header("Prefabs by archetype")] [SerializeField]
     private GameObject conservativeSaverPrefab;
@@ -53,10 +56,25 @@ public class OwnedNpcSpawner : MonoBehaviour
     private readonly HashSet<ulong> spawnedTokenIds = new HashSet<ulong>();
     private CancellationTokenSource lifetimeCts;
     private bool spawning;
+    
+    private Web3 readOnlyWeb3;
+    
+    private const string marketPlaceAbi = @"[
+      {""inputs"":[{""internalType"":""uint256"",""name"":""tokenId"",""type"":""uint256""},{""internalType"":""uint256"",""name"":""minPrice"",""type"":""uint256""}],""name"":""listNpc"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""tokenId"",""type"":""uint256""}],""name"":""cancelListing"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""tokenId"",""type"":""uint256""}],""name"":""clearStaleListing"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""tokenId"",""type"":""uint256""},{""internalType"":""uint256"",""name"":""maxPrice"",""type"":""uint256""}],""name"":""buyNpc"",""outputs"":[],""stateMutability"":""nonpayable"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":""tokenId"",""type"":""uint256""}],""name"":""getListing"",""outputs"":[{""internalType"":""address"",""name"":""seller"",""type"":""address""},{""internalType"":""uint256"",""name"":""minPrice"",""type"":""uint256""},{""internalType"":""bool"",""name"":""active"",""type"":""bool""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[{""internalType"":""uint256"",""name"":"""",""type"":""uint256""}],""name"":""listings"",""outputs"":[{""internalType"":""address"",""name"":""seller"",""type"":""address""},{""internalType"":""uint256"",""name"":""minPrice"",""type"":""uint256""},{""internalType"":""bool"",""name"":""active"",""type"":""bool""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""npcCharacter"",""outputs"":[{""internalType"":""address"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""pricing"",""outputs"":[{""internalType"":""address"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""},
+      {""inputs"":[],""name"":""usdc"",""outputs"":[{""internalType"":""address"",""name"":"""",""type"":""address""}],""stateMutability"":""view"",""type"":""function""}
+    ]";
 
     private void Awake()
     {
         lifetimeCts = new CancellationTokenSource();
+        readOnlyWeb3 = new Web3(rpcUrl);
     }
 
     private void Start()
@@ -137,6 +155,17 @@ public class OwnedNpcSpawner : MonoBehaviour
         {
             ct.ThrowIfCancellationRequested();
             ulong tokenIdUlong = (ulong)entry.TokenId;
+
+            // Skip if listed for sale — check BEFORE recording in spawnedTokenIds
+            // so that cancelling the listing later lets the NPC reappear.
+            var listing = await GetListingAsync(entry.TokenId);
+            if (listing != null && listing.Active)
+            {
+                if (logVerbose)
+                    Debug.Log($"[OwnedNpcSpawner] tokenId={tokenIdUlong} is listed for sale, skipping.");
+                continue;
+            }
+
             if (!spawnedTokenIds.Add(tokenIdUlong))
             {
                 if (logVerbose)
@@ -155,6 +184,25 @@ public class OwnedNpcSpawner : MonoBehaviour
                 spawnedTokenIds.Remove(tokenIdUlong);
             }
         }
+    }
+    
+    private async Task<MarketplaceListingOutputDTO> GetListingAsync(BigInteger tokenId)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        var listing = await ArcTrading.WebGL.WebGLChainApi.GetMarketplaceListingAsync(tokenId);
+        if (listing == null) return null;
+        return new MarketplaceListingOutputDTO
+        {
+            Seller = listing.seller,
+            MinPrice = string.IsNullOrEmpty(listing.minPrice) ? BigInteger.Zero : BigInteger.Parse(listing.minPrice),
+            Active = listing.active,
+        };
+#else
+        
+        var contract = readOnlyWeb3.Eth.GetContract(marketPlaceAbi, marketplaceContractAddress);
+        return await contract.GetFunction("getListing")
+            .CallDeserializingToObjectAsync<MarketplaceListingOutputDTO>(tokenId);
+#endif
     }
 
     private void SpawnOne(BigInteger tokenId, NpcDataDTO data)

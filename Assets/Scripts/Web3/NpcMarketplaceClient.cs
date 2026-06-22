@@ -109,7 +109,7 @@ public class NpcMarketplaceClient : MonoBehaviour
 
     // ---------------- Read ----------------
 
-    public async Task<MarketplaceListingOutputDTO> GetListingAsync(BigInteger tokenId)
+    private async Task<MarketplaceListingOutputDTO> GetListingAsync(BigInteger tokenId)
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
         var listing = await ArcTrading.WebGL.WebGLChainApi.GetMarketplaceListingAsync(tokenId);
