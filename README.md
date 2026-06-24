@@ -50,7 +50,7 @@ The system models a closed economic loop:
 | Wallet login | **EIP-1193** (MetaMask/Rabby/OKX) + **EIP-4361 SIWE** + local `HttpListener` Tx-bridge |
 | Storage | `PlayerPrefs` for sessions, `Application.persistentDataPath` for NPC payment-wallet vault |
 
-**WebGL note.** The client now includes a set of WebGL-specific wallet, chain and browser bridge interfaces, separated from the desktop/editor path with `UNITY_WEBGL && !UNITY_EDITOR` preprocessor guards. WebGL runtime Web3 calls intentionally avoid the Nethereum path: Unity WebGL runs as WebAssembly in a fundamentally single-threaded browser environment, which does not fit Nethereum's RPC/signing model well, while desktop/editor builds continue to use Nethereum.
+**WebGL note.** The client now includes a set of WebGL-specific wallet, chain and browser bridge interfaces, separated from the desktop/editor path with `UNITY_WEBGL && !UNITY_EDITOR` preprocessor guards. WebGL runtime Web3 calls intentionally avoid the Nethereum path: Unity WebGL runs as WebAssembly in a fundamentally single-threaded browser environment, which does not fit Nethereum's RPC/signing model well, while desktop/editor builds continue to use Nethereum. WebGL-related Web3 on-chain HTTP interfaces are hosted by the x402 backend server in the WebGL branch: <https://github.com/SovereignCircuitLabs/sovereign-circuit-server/tree/WebGL>.
 
 ### 3. Startup Flow
 
@@ -116,6 +116,7 @@ After deployment you should record the addresses of the following four contracts
      - `nftOwnerPrivateKey` may be left blank if `loginViaAuth` is enabled.
 3. Open the scene `Assets/Scenes/MainScene.unity` and fill in:
    - `NpcChainService/NpcCharacterContractClient` → `nftContractAddress` ← **NpcCharacter** address
+   - `NpcChainService/OwnedNpcSpawner` → `marketplaceContractAddress` ← **NpcMarketplace** address
 4. Open each of the three NPC prefabs under `Assets/Resources/` and fill in their `ArcTradingContractClient.contractAddress` with the **GamePayment** address:
    - `AggressiveTraderNpc`
    - `BalancedTraderNpc`
@@ -177,7 +178,7 @@ After deployment you should record the addresses of the following four contracts
 | 钱包登录 | **EIP-1193**（MetaMask/Rabby/OKX）+ **EIP-4361 SIWE** + 本地 `HttpListener` 交易桥 |
 | 存储 | `PlayerPrefs` 存 session，`Application.persistentDataPath` 存 NPC PaymentWallet vault |
 
-**WebGL 说明。** 客户端现在新增了一组只面向 WebGL 的钱包、链上读写和浏览器桥接接口，并通过 `UNITY_WEBGL && !UNITY_EDITOR` 等预处理宏与桌面 / Editor 路径区分。WebGL 运行时的 Web3 调用有意不走 Nethereum：Unity WebGL 的 WASM 本质上运行在浏览器单线程环境里，无法很好承载 Nethereum 的 RPC / 签名模型；桌面和 Editor 构建仍继续使用 Nethereum。
+**WebGL 说明。** 客户端现在新增了一组只面向 WebGL 的钱包、链上读写和浏览器桥接接口，并通过 `UNITY_WEBGL && !UNITY_EDITOR` 等预处理宏与桌面 / Editor 路径区分。WebGL 运行时的 Web3 调用有意不走 Nethereum：Unity WebGL 的 WASM 本质上运行在浏览器单线程环境里，无法很好承载 Nethereum 的 RPC / 签名模型；桌面和 Editor 构建仍继续使用 Nethereum。WebGL 相关的 Web3 链上 HTTP 接口统一放在 x402 后端服务器的 WebGL 分支中：<https://github.com/SovereignCircuitLabs/sovereign-circuit-server/tree/WebGL>。
 
 ### 3. 启动流程
 
@@ -243,6 +244,7 @@ cd sovereign-circuit-contracts
      - 如果勾选了 `loginViaAuth`，则 `nftOwnerPrivateKey` 可以留空。
 3. 打开场景 `Assets/Scenes/MainScene.unity`，并填入：
    - `NpcChainService/NpcCharacterContractClient` → `nftContractAddress` ← 填 **NpcCharacter** 地址
+   - `NpcChainService/OwnedNpcSpawner` → `marketplaceContractAddress` ← 填 **NpcMarketplace** 地址
 4. 打开 `Assets/Resources/` 目录下的三个 NPC 预制体，把它们各自的 `ArcTradingContractClient.contractAddress` 都填成 **GamePayment** 地址：
    - `AggressiveTraderNpc`
    - `BalancedTraderNpc`
@@ -304,7 +306,7 @@ cd sovereign-circuit-contracts
 | 錢包登入 | **EIP-1193**（MetaMask/Rabby/OKX）+ **EIP-4361 SIWE** + 本機 `HttpListener` 交易橋 |
 | 儲存 | `PlayerPrefs` 存 session、`Application.persistentDataPath` 存 NPC PaymentWallet vault |
 
-**WebGL 說明。** 客戶端現在新增了一組只面向 WebGL 的錢包、鏈上讀寫與瀏覽器橋接介面，並透過 `UNITY_WEBGL && !UNITY_EDITOR` 等預處理宏與桌面 / Editor 路徑區分。WebGL 執行階段的 Web3 呼叫有意不走 Nethereum：Unity WebGL 的 WASM 本質上運行在瀏覽器單執行緒環境裡，無法很好承載 Nethereum 的 RPC / 簽名模型；桌面與 Editor 建置仍繼續使用 Nethereum。
+**WebGL 說明。** 客戶端現在新增了一組只面向 WebGL 的錢包、鏈上讀寫與瀏覽器橋接介面，並透過 `UNITY_WEBGL && !UNITY_EDITOR` 等預處理宏與桌面 / Editor 路徑區分。WebGL 執行階段的 Web3 呼叫有意不走 Nethereum：Unity WebGL 的 WASM 本質上運行在瀏覽器單執行緒環境裡，無法很好承載 Nethereum 的 RPC / 簽名模型；桌面與 Editor 建置仍繼續使用 Nethereum。WebGL 相關的 Web3 鏈上 HTTP 介面統一放在 x402 後端伺服器的 WebGL 分支中：<https://github.com/SovereignCircuitLabs/sovereign-circuit-server/tree/WebGL>。
 
 ### 3. 啟動流程
 
@@ -370,6 +372,7 @@ cd sovereign-circuit-contracts
      - 若已勾選 `loginViaAuth`，則 `nftOwnerPrivateKey` 可以留空。
 3. 開啟場景 `Assets/Scenes/MainScene.unity`，並填入：
    - `NpcChainService/NpcCharacterContractClient` → `nftContractAddress` ← 填 **NpcCharacter** 地址
+   - `NpcChainService/OwnedNpcSpawner` → `marketplaceContractAddress` ← 填 **NpcMarketplace** 地址
 4. 開啟 `Assets/Resources/` 底下的三個 NPC 預製體，將它們各自的 `ArcTradingContractClient.contractAddress` 都填成 **GamePayment** 地址：
    - `AggressiveTraderNpc`
    - `BalancedTraderNpc`
