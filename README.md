@@ -50,6 +50,8 @@ The system models a closed economic loop:
 | Wallet login | **EIP-1193** (MetaMask/Rabby/OKX) + **EIP-4361 SIWE** + local `HttpListener` Tx-bridge |
 | Storage | `PlayerPrefs` for sessions, `Application.persistentDataPath` for NPC payment-wallet vault |
 
+**WebGL note.** The client now includes a set of WebGL-specific wallet, chain and browser bridge interfaces, separated from the desktop/editor path with `UNITY_WEBGL && !UNITY_EDITOR` preprocessor guards. WebGL runtime Web3 calls intentionally avoid the Nethereum path: Unity WebGL runs as WebAssembly in a fundamentally single-threaded browser environment, which does not fit Nethereum's RPC/signing model well, while desktop/editor builds continue to use Nethereum.
+
 ### 3. Startup Flow
 
 > The Unity client can **only** complete an end-to-end x402 purchase if the local x402 Seller server is reachable at `http://localhost:4021/item/`. **Always start the seller first.**
@@ -175,6 +177,8 @@ After deployment you should record the addresses of the following four contracts
 | 钱包登录 | **EIP-1193**（MetaMask/Rabby/OKX）+ **EIP-4361 SIWE** + 本地 `HttpListener` 交易桥 |
 | 存储 | `PlayerPrefs` 存 session，`Application.persistentDataPath` 存 NPC PaymentWallet vault |
 
+**WebGL 说明。** 客户端现在新增了一组只面向 WebGL 的钱包、链上读写和浏览器桥接接口，并通过 `UNITY_WEBGL && !UNITY_EDITOR` 等预处理宏与桌面 / Editor 路径区分。WebGL 运行时的 Web3 调用有意不走 Nethereum：Unity WebGL 的 WASM 本质上运行在浏览器单线程环境里，无法很好承载 Nethereum 的 RPC / 签名模型；桌面和 Editor 构建仍继续使用 Nethereum。
+
 ### 3. 启动流程
 
 > Unity 端 **只有在本地 x402 Seller 服务器（`http://localhost:4021/item/`）启动的情况下** 才能完成端到端的 x402 购买。**请务必先启动 seller 服务器。**
@@ -299,6 +303,8 @@ cd sovereign-circuit-contracts
 | AI 宏觀 Agent | LLM tool-loop（**OpenAI / Anthropic Claude / Google Gemini / DeepSeek**）+ 進程內 **MCP** 唯讀工具 |
 | 錢包登入 | **EIP-1193**（MetaMask/Rabby/OKX）+ **EIP-4361 SIWE** + 本機 `HttpListener` 交易橋 |
 | 儲存 | `PlayerPrefs` 存 session、`Application.persistentDataPath` 存 NPC PaymentWallet vault |
+
+**WebGL 說明。** 客戶端現在新增了一組只面向 WebGL 的錢包、鏈上讀寫與瀏覽器橋接介面，並透過 `UNITY_WEBGL && !UNITY_EDITOR` 等預處理宏與桌面 / Editor 路徑區分。WebGL 執行階段的 Web3 呼叫有意不走 Nethereum：Unity WebGL 的 WASM 本質上運行在瀏覽器單執行緒環境裡，無法很好承載 Nethereum 的 RPC / 簽名模型；桌面與 Editor 建置仍繼續使用 Nethereum。
 
 ### 3. 啟動流程
 
