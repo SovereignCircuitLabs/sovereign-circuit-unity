@@ -896,8 +896,12 @@ public class ArcTradingContractClient : MonoBehaviour
             var nanopaymentCapWebgl = Erc20UsdcHelper.ParseUsdc(capUsdcWebgl);
 
             var effectiveAvailableUsdcWebgl = await GetGatewayAvailableBalanceUSDCAsync();
-            if (effectiveAvailableUsdcWebgl < capUsdcWebgl)
-                await arcNanopaymentWebgl.ApproveIfNeededThenGatewayDepositAsync((decimal)arcNanopaymentWebgl.maxNanopaymentUsdc);
+            var maxNFTBuyPriceWebgl = FromUsdc(await GetMaxBuyPriceAsync());
+            if (effectiveAvailableUsdcWebgl < maxNFTBuyPriceWebgl)
+            {
+                decimal depositUsdcWebgl = maxNFTBuyPriceWebgl - effectiveAvailableUsdcWebgl;
+                await arcNanopaymentWebgl.ApproveIfNeededThenGatewayDepositAsync(depositUsdcWebgl);
+            }
 
             var tbaWebgl = await EnsureTbaAddressAsync();
 
@@ -942,8 +946,12 @@ public class ArcTradingContractClient : MonoBehaviour
             var nanopaymentCap = Erc20UsdcHelper.ParseUsdc(capUsdc);
 
             var effectiveAvailableUsdc = await GetGatewayAvailableBalanceUSDCAsync();
-            if (effectiveAvailableUsdc < capUsdc)
-                await arcNanopayment.ApproveIfNeededThenGatewayDepositAsync((decimal)arcNanopayment.maxNanopaymentUsdc);
+            var maxNFTBuyPrice = FromUsdc(await GetMaxBuyPriceAsync());
+            if (effectiveAvailableUsdc < maxNFTBuyPrice)
+            {
+                decimal depositUsdc = maxNFTBuyPrice - effectiveAvailableUsdc;
+                await arcNanopayment.ApproveIfNeededThenGatewayDepositAsync(depositUsdc);
+            }
 
             var tba = await EnsureTbaAddressAsync();
 
