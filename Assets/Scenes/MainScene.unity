@@ -879,6 +879,11 @@ PrefabInstance:
       propertyPath: conservativeHomePoint
       value: 
       objectReference: {fileID: 448259180}
+    - target: {fileID: 7318653222943605767, guid: 6be6f6a63de895242b8afe9663738913,
+        type: 3}
+      propertyPath: marketplaceContractAddress
+      value: 0xF761c5964eb146575b669fCd205a640689860233
+      objectReference: {fileID: 0}
     - target: {fileID: 7604934809089489008, guid: 6be6f6a63de895242b8afe9663738913,
         type: 3}
       propertyPath: nftContractAddress

@@ -18,7 +18,7 @@ public class ArcTradingContractClient : MonoBehaviour
     // GamePayment contract address
     [SerializeField] private string contractAddress = "0xc7C9BBCe60802c94AfB7e224e98928A4Ee0de158";
     public string ContractAddress => contractAddress;
-    [SerializeField] private string privateKey;
+    private string privateKey;
     [SerializeField] private float initialUsdcCapital = 0.5f;
     public string PrivateKey => privateKey;
     

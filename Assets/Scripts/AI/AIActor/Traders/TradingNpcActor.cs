@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using CleverCrow.Fluid.BTs.Trees;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
+using UnityEngine.UI;
 using BtTaskStatus = CleverCrow.Fluid.BTs.Tasks.TaskStatus;
 
 [RequireComponent(typeof(ArcTradingContractClient))]
@@ -12,6 +13,8 @@ using BtTaskStatus = CleverCrow.Fluid.BTs.Tasks.TaskStatus;
 public abstract class TradingNpcActor : AIActor
 {
     [Header("Trader NPC")] public TradingNpcArchetype archetype = TradingNpcArchetype.BalancedTrader;
+    [HideInInspector] public string npcName = "";
+    public Text npcNameTxt;
     public NpcPortfolioConfig portfolioConfig = new NpcPortfolioConfig();
     public NpcPortfolioState portfolioState = new NpcPortfolioState();
     [SerializeField] private bool useNanopayment = false;
@@ -23,8 +26,9 @@ public abstract class TradingNpcActor : AIActor
     [SerializeField] private Transform homePoint;
     //[SerializeField] private float arriveHeight = 0.5f;
 
-    [Header("Init Retry")]
-    [SerializeField] private int maxInitAttempts = 5;
+    [Header("Init Retry")] [SerializeField]
+    private int maxInitAttempts = 5;
+
     [SerializeField] private float initBaseBackoffSeconds = 2f;
     [SerializeField] private float initMaxBackoffSeconds = 30f;
     [SerializeField] private float initStepTimeoutSeconds = 20f;
@@ -88,6 +92,7 @@ public abstract class TradingNpcActor : AIActor
             portfolioConfig.CopyFrom(pendingChainPortfolioOverride);
             pendingChainPortfolioOverride = null;
         }
+
         CaptureBasePortfolioConfig();
         SubscribeToWorldEvents();
         ApplyWorldEventConfig();
@@ -255,12 +260,12 @@ public abstract class TradingNpcActor : AIActor
             currentActivity = $"Moving to {currentMoveTargetName}";
             AddActivity(TradingNpcActivityType.MoveToTarget, "Move target changed", currentActivity);
         }
-        
+
         if (navMeshNavigator != null)
         {
             navMeshNavigator.SetDestination(targetPosition);
         }
-        
+
         Vector3 steerTarget = targetPosition;
         if (navMeshNavigator != null && navMeshNavigator.HasPath)
         {
@@ -283,6 +288,7 @@ public abstract class TradingNpcActor : AIActor
             {
                 navMeshNavigator.ClearPath();
             }
+
             return BtTaskStatus.Success;
         }
 
@@ -493,8 +499,14 @@ public abstract class TradingNpcActor : AIActor
                 initState = NpcInitState.Retrying;
                 currentActivity = $"Init failed, retry in {backoff:0}s — {Truncate(ex.Message)}";
 
-                try { await ArcTrading.Crypto.WebGLAsyncBridge.DelayAsync(TimeSpan.FromSeconds(backoff), ct); }
-                catch (OperationCanceledException) { return; }
+                try
+                {
+                    await ArcTrading.Crypto.WebGLAsyncBridge.DelayAsync(TimeSpan.FromSeconds(backoff), ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
             }
         }
 
@@ -613,8 +625,16 @@ public abstract class TradingNpcActor : AIActor
     {
         while (!ct.IsCancellationRequested && initState == NpcInitState.Failed)
         {
-            try { await ArcTrading.Crypto.WebGLAsyncBridge.DelayAsync(TimeSpan.FromSeconds(fallbackBackgroundRetryIntervalSeconds), ct); }
-            catch (OperationCanceledException) { return; }
+            try
+            {
+                await ArcTrading.Crypto.WebGLAsyncBridge.DelayAsync(
+                    TimeSpan.FromSeconds(fallbackBackgroundRetryIntervalSeconds), ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
             if (this == null || ct.IsCancellationRequested) return;
 
             try
@@ -666,6 +686,7 @@ public abstract class TradingNpcActor : AIActor
             throw new TimeoutException($"{label} timed out after {seconds:0}s");
 #endif
         }
+
         await task;
     }
 
@@ -684,6 +705,7 @@ public abstract class TradingNpcActor : AIActor
             throw new TimeoutException($"{label} timed out after {seconds:0}s");
 #endif
         }
+
         return await task;
     }
 
@@ -705,7 +727,7 @@ public abstract class TradingNpcActor : AIActor
             ? (float)await contractClient.GetWalletBalanceUSDCAsync(inventoryAddress)
             : 0f;
         portfolioState.walletUSDC = traderUsdc + tbaUsdc;
-        
+
         portfolioState.vaultUSDC = (float)await contractClient.GetVaultBalanceUSDCAsync(inventoryAddress);
         portfolioState.gatewayUSDC = (float)await contractClient.GetGatewayAvailableBalanceUSDCAsync();
         portfolioState.nftInventoryCount = await contractClient.GetNftInventoryCountAsync(inventoryAddress);
@@ -868,8 +890,8 @@ public abstract class TradingNpcActor : AIActor
     public void SetRuntimeWorldPoints(Transform market, Transform shop, Transform home)
     {
         if (market != null) marketPoint = market;
-        if (shop != null)   shopPoint   = shop;
-        if (home != null)   homePoint   = home;
+        if (shop != null) shopPoint = shop;
+        if (home != null) homePoint = home;
     }
 
     private void AddActivity(

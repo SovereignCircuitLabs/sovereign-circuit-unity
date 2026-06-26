@@ -263,6 +263,27 @@ public class OwnedNpcSpawner : MonoBehaviour
                             "world-point overrides skipped.");
                         break;
                 }
+                
+                actor.npcName = data.NpcName;
+                string npcArchetype = "";
+                switch (data.Archetype)
+                {
+                    case 0:
+                        npcArchetype = "Conservative Saver";
+                        break;
+                    case 1:
+                        npcArchetype = "Balanced Trader";
+                        break;
+                    case 2:
+                        npcArchetype = "Aggressive Speculator";
+                        break;
+                    default:
+                        npcArchetype = "Unknown Archetype";
+                        break;
+                }
+                actor.npcNameTxt.text = string.IsNullOrWhiteSpace(actor.npcName)
+                    ? $"{npcArchetype}"
+                    : $"{data.NpcName}\n({npcArchetype})";
             }
             else
             {

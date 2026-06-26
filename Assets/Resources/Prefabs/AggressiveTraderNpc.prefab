@@ -1041,7 +1041,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   rpcUrl: https://rpc.testnet.arc.network
   contractAddress: 0x524189db69Af7d0a8d5CB72b14e529bc1bF7B40c
-  privateKey: 
   initialUsdcCapital: 7
   nftTokenId: 0
   npcPaymentWalletService: {fileID: 0}
@@ -1080,6 +1079,8 @@ MonoBehaviour:
   viewRadius: 10
   attackRadius: 1
   archetype: 1
+  npcName: 
+  npcNameTxt: {fileID: 7396835089431549216}
   portfolioConfig:
     livingNeedsWeight: 0.2
     reserveWeight: 0.2
@@ -1290,8 +1291,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -405.27484, y: -257.66995}
-  m_SizeDelta: {x: 331.6991, y: 89.4596}
+  m_AnchoredPosition: {x: -405.24, y: -257.3}
+  m_SizeDelta: {x: 402, y: 110}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &3914195337579559873
 CanvasRenderer:
@@ -1334,7 +1335,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: Aggressive
+  m_Text: "Merchant Fenn \n(Aggressive Speculator)"
 --- !u!114 &8781272045555417583
 MonoBehaviour:
   m_ObjectHideFlags: 0
